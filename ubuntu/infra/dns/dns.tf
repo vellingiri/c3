@@ -23,9 +23,9 @@ resource "openstack_dns_zone_v2" "reverse" {
 ########################################
 resource "openstack_dns_recordset_v2" "test_record" {
   zone_id = openstack_dns_zone_v2.forward.id
-  name    = "c3.${var.dns_zone_name}"
+  name    = "cloud.${var.dns_zone_name}"
   type    = "A"
   ttl     = 3000
-  records = ["192.168.2.5"]
+  records = ["192.168.2.15"]
 }
 

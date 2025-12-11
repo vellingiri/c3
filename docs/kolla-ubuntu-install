@@ -57,3 +57,5 @@ openstack server add floating ip demo1 192.168.1.126
 openstack server show demo1 -c addresses
 ssh cirros@192.168.1.126
 
+openstack flavor create m1.small --vcpus 2 --ram 2048 --disk 30
+openstack flavor create m1.medium --vcpus 4 --ram 4068 --disk 40

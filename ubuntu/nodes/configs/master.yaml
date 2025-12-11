@@ -7,9 +7,9 @@ disable_root: false
 
 runcmd:
   - touch /home/ubuntu/.hushlogin
-  - chown ubuntu.ubuntu /home/ubuntu/.hushlogin
+  - chown ubuntu:ubuntu /home/ubuntu/.hushlogin
   - unlink /etc/resolv.conf
-  - echo "search rdulinux.com\nnameserver 192.168.2.5" > /etc/resolv.conf
+  - echo "search rdulinux.com\nnameserver 192.168.2.15" > /etc/resolv.conf
   - echo "alias k='kubectl'" >> /root/.bashrc
   - echo "alias k='kubectl'" >> /home/ubuntu/.bashrc
 
