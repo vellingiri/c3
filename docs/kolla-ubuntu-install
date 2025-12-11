@@ -1,3 +1,5 @@
+git config --global user.email "vellingiribks@gmail.com"
+git config --global user.name "Vellingiri Subramaniam"
 Kolla Ansible
 
 vim /etc/sudoers
