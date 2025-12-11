@@ -20,7 +20,7 @@ read -p "⚠️  This will remove ALL OpenStack containers, configs, volumes. Co
 
 echo -e "${GREEN}🧹 Running kolla-ansible destroy...${NC}"
 if command -v kolla-ansible >/dev/null 2>&1; then
-    kolla-ansible destroy -i all-in-one --yes-i-really-really-mean-it || true
+    kolla-ansible destroy -i $HOME/all-in-one --yes-i-really-really-mean-it || true
 else
     echo "⚠️  kolla-ansible not installed — skipping destroy phase."
 fi
