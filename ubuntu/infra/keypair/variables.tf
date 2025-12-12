@@ -3,6 +3,6 @@ variable "keypair_name" {
 }
 
 variable "public_key_path" {
-  default = "~/.ssh/id_rsa.pub"
+  default = "~/.ssh/id_ed25519.pub"
 }
 

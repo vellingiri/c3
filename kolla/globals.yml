@@ -11,5 +11,5 @@ enable_horizon_designate: "{{ enable_designate | bool }}"
 enable_neutron_provider_networks: "yes"
 designate_backend: "bind9"
 designate_ns_record:
-- "c3.rdulinux.com"
+- "cloud.rdulinux.com"
 neutron_dns_domain: rdulinux.com.
