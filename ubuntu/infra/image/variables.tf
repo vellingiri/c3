@@ -3,7 +3,7 @@ variable "img" {
   default = {
     img1 = {
       name            = "ubuntu2404"
-      local_file_path = "/home/ubuntu/cloud/debootstrap/ubuntu2404/ubuntu2404.qcow2"
+      local_file_path = "/tmp/ubuntu2404.qcow2"
     }
     #img2 = {
     #  name            = "ubuntu1804"
