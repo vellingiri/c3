@@ -33,8 +33,8 @@ resource "openstack_compute_instance_v2" "vms" {
    user_data = file(
   each.key == "controller" ?
   "${path.module}/../configs/master.yaml" :
-  each.key == "rancher" ?
-  "${path.module}/../configs/rancher.yaml" :
+  each.key == "gitlab" ?
+  "${path.module}/../configs/gitlab.yaml" :
   "${path.module}/../configs/worker.yaml"
 )
 
