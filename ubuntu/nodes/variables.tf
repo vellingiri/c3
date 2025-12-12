@@ -9,7 +9,7 @@ variable "vm_names" {
 
 variable "image_name" {
   type    = string
-  default = "ubuntu2204"
+  default = "ubuntu2404"
 }
 
 variable "keypair_name" {
