@@ -6,15 +6,8 @@ package_upgrade: false
 ssh_pwauth: true
 disable_root: false
 
-packages:
-  - curl
-  - apt-transport-https
-  - ca-certificates
-  - lsb-release
-  - tzdata
-  - perl
-
 runcmd:
+  - apt install curl apt-transport-https ca-certificates lsb-release tzdata perl -y
   - touch /root/.hushlogin
   - unlink /etc/resolv.conf
   - echo "search rdulinux.com\nnameserver 192.168.2.15" > /etc/resolv.conf
