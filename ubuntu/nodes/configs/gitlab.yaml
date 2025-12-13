@@ -7,10 +7,10 @@ ssh_pwauth: true
 disable_root: false
 
 runcmd:
-  - apt install curl apt-transport-https ca-certificates lsb-release tzdata perl -y
   - touch /root/.hushlogin
   - unlink /etc/resolv.conf
   - echo "search rdulinux.com\nnameserver 192.168.2.15" > /etc/resolv.conf
+  - apt-get update && apt install curl apt-transport-https ca-certificates lsb-release tzdata perl -y
   - curl https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | sudo bash
   - apt update
   - FLOATING_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
