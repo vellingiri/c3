@@ -4,7 +4,7 @@ vm_names = {
   worker2 = "worker2"
   worker3 = "worker3"
   gitlab  = "gitlab"
-  argo	  = "argo"
+  argocd  = "argocd"
 }
 
 vm_flavors = {
@@ -13,7 +13,7 @@ vm_flavors = {
   worker2    = "m1.small"
   worker3    = "m1.small"
   gitlab     = "m1.large"
-  argo	     = "m1.small"
+  argocd     = "m1.small"
 }
 
 image_name   = "ubuntu2404"
