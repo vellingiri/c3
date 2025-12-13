@@ -178,6 +178,7 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 EOF
 chroot "${WORKDIR}/mnt" bash -c "
 sed -i   's/^[[:space:]]*- apt_configure[[:space:]]*$/#&/'   /etc/cloud/cloud.cfg
+cat /dev/null > /etc/apt/sources.list
 "
 
 ###############################################################################
