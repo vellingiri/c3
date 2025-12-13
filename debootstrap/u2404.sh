@@ -42,7 +42,8 @@ debootstrap \
   --arch=${ARCH} \
   ${RELEASE} \
   "${ROOTFS}" \
-  http://archive.ubuntu.com/ubuntu/
+  http://repo.rdulinux.com/ubuntu
+  #http://archive.ubuntu.com/ubuntu/
 
 ###############################################################################
 # STEP 2 — CREATE RAW DISK
@@ -163,6 +164,20 @@ sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/ssh
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 rm -fv /root/.ssh/authorized_keys
 touch /root/.hushlogin
+"
+
+###############################################################################
+# APT CONFIGURATION
+###############################################################################
+cat > "${WORKDIR}/mnt/etc/apt/sources.list.d/ubuntu.sources" << EOF
+Types: deb
+URIs:  http://repo.rdulinux.com/ubuntu/
+Suites: noble noble-updates noble-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+chroot "${WORKDIR}/mnt" bash -c "
+sed -i   's/^[[:space:]]*- apt_configure[[:space:]]*$/#&/'   /etc/cloud/cloud.cfg
 "
 
 ###############################################################################
