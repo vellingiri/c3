@@ -1,10 +1,10 @@
 vm_names = {
   controller = "controller"
-  worker1 = "worker1"
-  worker2 = "worker2"
-  worker3 = "worker3"
-  gitlab  = "gitlab"
-  argocd  = "argocd"
+  worker1    = "worker1"
+  worker2    = "worker2"
+  worker3    = "worker3"
+  gitlab     = "gitlab"
+  argocd     = "argocd"
 }
 
 vm_flavors = {

@@ -14,9 +14,9 @@ data "terraform_remote_state" "infra" {
 module "compute" {
   source = "./compute"
 
-  vm_names     = var.vm_names
-  vm_flavors   = var.vm_flavors
-  image_name   = var.image_name
+  vm_names   = var.vm_names
+  vm_flavors = var.vm_flavors
+  image_name = var.image_name
 
   keypair_name = data.terraform_remote_state.infra.outputs.keypair_name
 
