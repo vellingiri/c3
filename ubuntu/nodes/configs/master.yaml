@@ -26,7 +26,7 @@ runcmd:
   - apt-get update && apt-get install -y containerd apt-transport-https ca-certificates curl gpg autofs
 
   - echo "/- /etc/auto.mount" >> /etc/auto.master
-  - echo "/mnt -fstype=nfs,rw cloud.rdulinux.com:/nfsshare" >/etc/auto.mount
+  - echo "/nfsshare -fstype=nfs,rw cloud.rdulinux.com:/nfsshare" >/etc/auto.mount
   - systemctl restart autofs
 
   - mkdir -p /etc/containerd
