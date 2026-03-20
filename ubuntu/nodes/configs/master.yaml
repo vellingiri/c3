@@ -70,4 +70,4 @@ runcmd:
 
   # save join command
   - kubeadm token create --print-join-command > /nfsshare/join.sh
-    #- chmod +x /home/ubuntu/join.sh
+  - chmod +x /nfsshare/join.sh
