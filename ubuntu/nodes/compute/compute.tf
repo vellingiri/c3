@@ -14,8 +14,8 @@ resource "openstack_networking_port_v2" "ports" {
     subnet_id = var.private_subnet_id
   }
   security_group_ids = [
-    "a20176f9-19d9-4800-9572-8d943f4d9847",  # default (existing)
-    "6f61ee81-d825-4e94-b4ce-f75da9470e4e"   # k8s (existing)
+    "9c0bdbc7-1184-413a-a390-13ecc7982c33",  # default (existing)
+    "fe1dd12a-efa1-43b7-bb38-09c72daebc3f"   # k8s (existing)
   ]
 
 }
