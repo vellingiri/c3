@@ -14,7 +14,12 @@ runcmd:
   - swapoff -a
   - sed -i '/swap/d' /etc/fstab
 
-  - apt-get update && apt-get install -y containerd apt-transport-https ca-certificates curl gpg
+  - apt-get update && apt-get install -y containerd apt-transport-https ca-certificates curl gpg autofs
+
+  - echo "/- /etc/auto.mount" >> /etc/auto.master
+  - echo "/mnt -fstype=nfs,rw cloud.rdulinux.com:/nfsshare" >/etc/auto.mount
+  - systemctl restart autofs
+
   - mkdir -p /etc/containerd
   - containerd config default > /etc/containerd/config.toml
   - sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
