@@ -42,7 +42,7 @@ debootstrap \
   --arch=${ARCH} \
   ${RELEASE} \
   "${ROOTFS}" \
-  http://repo.rdulinux.com/ubuntu
+  http://192.168.2.10/ubuntu
   #http://archive.ubuntu.com/ubuntu/
 
 ###############################################################################
@@ -245,3 +245,6 @@ echo
 echo "Upload example:"
 echo "  openstack image create --disk-format qcow2 --container-format bare --file ${QCOW} ${IMAGE_NAME}"
 echo
+
+cp -avx ${QCOW} /nfsshare
+rm -rf ${WORKDIR}
