@@ -35,4 +35,4 @@ runcmd:
   - sysctl --system
 
   # auto join the cluster
-  #- bash /home/ubuntu/join.sh || true
+  bash /nfsshare/join.sh || true
