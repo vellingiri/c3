@@ -19,7 +19,7 @@ resource "openstack_networking_port_v2" "ports" {
   }
   security_group_ids = [
     "9c0bdbc7-1184-413a-a390-13ecc7982c33",  # default (existing)
-    "4e6e1a5c-8aca-4099-b799-371fd40fb5fa"   # k8s (existing)
+    "d97cfded-bd35-4795-999f-7a2b7c8e1b98"   # k8s (existing)
   ]
 
 }
