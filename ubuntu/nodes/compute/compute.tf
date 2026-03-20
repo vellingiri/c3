@@ -10,6 +10,10 @@ resource "openstack_networking_port_v2" "ports" {
   name       = "${each.value}-port"
   network_id = var.private_network_id
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   fixed_ip {
     subnet_id = var.private_subnet_id
   }
