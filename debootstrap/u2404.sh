@@ -114,7 +114,7 @@ apt-get install -y udev initramfs-tools
 apt-get install -y linux-image-virtual
 
 # SSH server
-apt-get install -y openssh-server wget iproute2 net-tools dnsutils vim iputils-ping
+apt-get install -y openssh-server wget iproute2 net-tools dnsutils vim iputils-ping curl cron
 systemctl enable ssh || true
 
 # Cloud-init basics
