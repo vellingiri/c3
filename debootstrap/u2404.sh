@@ -125,6 +125,7 @@ apt-get install -y grub-pc grub-pc-bin
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*
+ln -fs /usr/share/zoneinfo/Asia/Kolkata  /etc/localtime
 "
 
 ###############################################################################
