@@ -42,7 +42,7 @@ debootstrap \
   --arch=${ARCH} \
   ${RELEASE} \
   "${ROOTFS}" \
-  http://192.168.2.10/ubuntu
+  http://repo.rdulinux.com/ubuntu
   #http://archive.ubuntu.com/ubuntu/
 
 ###############################################################################

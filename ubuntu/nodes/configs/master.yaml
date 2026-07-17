@@ -1,18 +1,16 @@
 #cloud-config
-package_update: true
-package_upgrade: false
-
 ssh_pwauth: true
 disable_root: false
 
 runcmd:
+  - unlink /etc/resolv.conf
+  - echo "search rdulinux.com\nnameserver 192.168.2.2" > /etc/resolv.conf
+  - apt update
+  #- DEBIAN_FRONTEND=noninteractive apt upgrade -y
   - touch /home/ubuntu/.hushlogin
   - chown ubuntu:ubuntu /home/ubuntu/.hushlogin
-  - unlink /etc/resolv.conf
-  - echo "search rdulinux.com\nnameserver 192.168.2.15" > /etc/resolv.conf
   - echo "alias k='kubectl'" >> /root/.bashrc
   - echo "alias k='kubectl'" >> /home/ubuntu/.bashrc
-
   - swapoff -a
   - sed -i '/swap/d' /etc/fstab
 
@@ -26,7 +24,7 @@ runcmd:
   - apt-get update && apt-get install -y containerd apt-transport-https ca-certificates curl gpg autofs
 
   - echo "/- /etc/auto.mount" >> /etc/auto.master
-  - echo "/nfsshare -fstype=nfs,rw cloud.rdulinux.com:/nfsshare" >/etc/auto.mount
+  - echo "/nfsshare -fstype=nfs,rw repo.rdulinux.com:/nfsshare" >/etc/auto.mount
   - systemctl restart autofs
 
   - mkdir -p /etc/containerd

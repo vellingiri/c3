@@ -20,17 +20,17 @@ resource "openstack_dns_zone_v2" "reverse" {
 
 resource "openstack_dns_recordset_v2" "cloud_f" {
   zone_id = openstack_dns_zone_v2.forward.id
-  name    = "cloud.${var.dns_zone_name}"
+  name    = "c3.${var.dns_zone_name}"
   type    = "A"
   ttl     = 3000
-  records = ["192.168.2.15"]
+  records = ["192.168.2.2"]
 }
 resource "openstack_dns_recordset_v2" "cloud_r" {
   zone_id = openstack_dns_zone_v2.reverse.id
-  name    = "15.${var.reverse_zone_name}"
+  name    = "2.${var.reverse_zone_name}"
   type    = "PTR"
   ttl     = 3000
-  records = ["cloud.${var.dns_zone_name}"]
+  records = ["c3.${var.dns_zone_name}"]
 }
 
 resource "openstack_dns_recordset_v2" "repo_f" {
@@ -38,12 +38,27 @@ resource "openstack_dns_recordset_v2" "repo_f" {
   name    = "repo.${var.dns_zone_name}"
   type    = "A"
   ttl     = 3000
-  records = ["192.168.2.10"]
+  records = ["192.168.2.3"]
 }
 resource "openstack_dns_recordset_v2" "repo_r" {
   zone_id = openstack_dns_zone_v2.reverse.id
-  name    = "10.${var.reverse_zone_name}"
+  name    = "3.${var.reverse_zone_name}"
   type    = "PTR"
   ttl     = 3000
   records = ["repo.${var.dns_zone_name}"]
+}
+
+resource "openstack_dns_recordset_v2" "finance_f" {
+  zone_id = openstack_dns_zone_v2.forward.id
+  name    = "finance.${var.dns_zone_name}"
+  type    = "A"
+  ttl     = 3000
+  records = ["192.168.2.5"]
+}
+resource "openstack_dns_recordset_v2" "finance_r" {
+  zone_id = openstack_dns_zone_v2.reverse.id
+  name    = "5.${var.reverse_zone_name}"
+  type    = "PTR"
+  ttl     = 3000
+  records = ["finance.${var.dns_zone_name}"]
 }
