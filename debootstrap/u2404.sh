@@ -28,13 +28,13 @@ apt-get install -y \
   cloud-init \
   initramfs-tools \
   udev \
-  linux-image-virtual \
   dosfstools \
   gdisk
-
+#linux-image-virtual \
 ###############################################################################
 # STEP 1 — CREATE MINIMAL ROOTFS
 ###############################################################################
+repo=$(host repo | awk '{print $NF}')
 echo "[2] Running debootstrap (minbase)…"
 debootstrap \
   --variant=minbase \
@@ -42,7 +42,7 @@ debootstrap \
   --arch=${ARCH} \
   ${RELEASE} \
   "${ROOTFS}" \
-  http://repo.rdulinux.com/ubuntu
+  http://$repo/ubuntu
   #http://archive.ubuntu.com/ubuntu/
 
 ###############################################################################
