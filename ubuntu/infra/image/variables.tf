@@ -5,10 +5,10 @@ variable "img" {
       name            = "ubuntu2404"
       local_file_path = "/nfsshare/qcow2/ubuntu2404.qcow2"
     }
-    #img2 = {
-    #  name            = "ubuntu1804"
-    #  local_file_path = "/iso/c3/ubuntu1804.qcow2"
-    #}
+    img2 = {
+      name            = "debian13"
+      local_file_path = "/nfsshare/qcow2/debian13.qcow2"
+    }
     #img3 = {
     #  name            = "debian10"
     #  local_file_path = "/iso/c3/debian10.qcow2"
