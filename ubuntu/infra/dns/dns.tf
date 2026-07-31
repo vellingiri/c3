@@ -62,3 +62,29 @@ resource "openstack_dns_recordset_v2" "finance_r" {
   ttl     = 3000
   records = ["finance.${var.dns_zone_name}"]
 }
+
+########################################
+# Public Website
+########################################
+
+resource "openstack_dns_recordset_v2" "website_root_f" {
+  zone_id = openstack_dns_zone_v2.forward.id
+  name    = var.dns_zone_name
+  type    = "A"
+  ttl     = 3000
+
+  records = [
+    "13.140.58.46"
+  ]
+}
+
+resource "openstack_dns_recordset_v2" "website_www_f" {
+  zone_id = openstack_dns_zone_v2.forward.id
+  name    = "www.${var.dns_zone_name}"
+  type    = "A"
+  ttl     = 3000
+
+  records = [
+    "13.140.58.46"
+  ]
+}
