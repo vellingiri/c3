@@ -50,7 +50,7 @@ resource "openstack_dns_recordset_v2" "repo_r" {
 
 resource "openstack_dns_recordset_v2" "finance_f" {
   zone_id = openstack_dns_zone_v2.forward.id
-  name    = "finance.${var.dns_zone_name}"
+  name    = "qa.${var.dns_zone_name}"
   type    = "A"
   ttl     = 3000
   records = ["192.168.2.5"]
@@ -60,7 +60,7 @@ resource "openstack_dns_recordset_v2" "finance_r" {
   name    = "5.${var.reverse_zone_name}"
   type    = "PTR"
   ttl     = 3000
-  records = ["finance.${var.dns_zone_name}"]
+  records = ["qa.${var.dns_zone_name}"]
 }
 
 ########################################
