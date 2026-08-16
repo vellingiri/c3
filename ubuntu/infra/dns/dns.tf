@@ -48,6 +48,20 @@ resource "openstack_dns_recordset_v2" "repo_r" {
   records = ["repo.${var.dns_zone_name}"]
 }
 
+resource "openstack_dns_recordset_v2" "haproxy_f" {
+  zone_id = openstack_dns_zone_v2.forward.id
+  name    = "haproxy.${var.dns_zone_name}"
+  type    = "A"
+  ttl     = 3000
+  records = ["192.168.2.5"]
+}
+resource "openstack_dns_recordset_v2" "haproxy_r" {
+  zone_id = openstack_dns_zone_v2.reverse.id
+  name    = "5.${var.reverse_zone_name}"
+  type    = "PTR"
+  ttl     = 3000
+  records = ["haproxy.${var.dns_zone_name}"]
+}
 ########################################
 # Public Website
 ########################################
@@ -72,4 +86,19 @@ resource "openstack_dns_recordset_v2" "website_www_f" {
   records = [
     "13.140.58.46"
   ]
+}
+
+resource "openstack_dns_recordset_v2" "argo_f" {
+  zone_id = openstack_dns_zone_v2.forward.id
+  name    = "argo.${var.dns_zone_name}"
+  type    = "A"
+  ttl     = 3000
+  records = ["192.168.2.5"]
+}
+resource "openstack_dns_recordset_v2" "qa_f" {
+  zone_id = openstack_dns_zone_v2.forward.id
+  name    = "qa.${var.dns_zone_name}"
+  type    = "A"
+  ttl     = 3000
+  records = ["192.168.2.5"]
 }
