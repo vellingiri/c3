@@ -11,11 +11,11 @@ variable "external_gateway_ip" {
 }
 
 variable "external_allocation_start" {
-  default = "192.168.2.100"
+  default = "192.168.2.51"
 }
 
 variable "external_allocation_end" {
-  default = "192.168.2.200"
+  default = "192.168.2.150"
 }
 
 variable "public_physical_network" {
