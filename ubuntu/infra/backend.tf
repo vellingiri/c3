@@ -6,7 +6,7 @@ terraform {
     use_lockfile = true
 
     endpoints = {
-      s3 = "http://192.168.2.196:9000"
+      s3 = "http://192.168.2.4:9000"
     }
 
     skip_credentials_validation = true
