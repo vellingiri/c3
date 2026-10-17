@@ -1,0 +1,5 @@
+#cloud-config
+# Only used when a database VM is (re)built; adopted VMs keep their first-boot config.
+runcmd:
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql nfs-common
+  - systemctl enable --now postgresql

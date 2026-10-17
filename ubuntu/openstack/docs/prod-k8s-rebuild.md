@@ -1,0 +1,146 @@
+# Rebuild the prod k8s cluster (park workloads on QA)
+
+Goal: recreate `prod-c1`, `prod-w1..3` from the current cloud-init (proper hostnames /
+node names) with almost no downtime, by running the workloads on the QA cluster meanwhile.
+
+## What runs in prod (from the 2026-10-17 inventory)
+| Where | What |
+|---|---|
+| ns `argocd` | Argo CD v3.5.1 (7 pods), one Application `finance-qa`, one repo credential |
+| ns `finance` | Deployments backend, docs, frontend, nginx; CronJobs db-backup-hourly/daily |
+| finance secrets | `app-secret`, `db-secret`, `ghcr-secret` (not in git) |
+| finance storage | 3 NFS PVs on `repo.rdulinux.com:/exports/finance-qa/{backups/finance,logs,uploads}` (data stays on NFS) |
+| database | the shared `db` VM, outside the cluster |
+| Exposure | `finance/nginx` NodePort 30080, `argocd-server` NodePort 30443, haproxy routes to both |
+| Git | `https://github.com/vellingiri/finance.git`, path `k8s`, branch `develop` |
+
+## Key facts that make this safe
+- A replaced VM keeps its port and floating IP (separate Terraform resources), so private and
+  floating IPs, haproxy backends and any IP allow-lists do not change.
+- Until Phase 3 nothing in prod is modified. To roll back before then, restore the haproxy config.
+- Never run the same CronJobs in both clusters (they write to the same NFS backup dir).
+
+Helper: `scripts/k8s-copy.sh` (run on prod-c1) pipes objects to QA over ssh without writing
+them to disk. Copy it to prod-c1 first: `scp scripts/k8s-copy.sh root@prod-c1.rdulinux.com:/usr/local/bin/`.
+
+---
+
+## Phase 0 - preflight (read-only on prod)
+On `prod-c1`:
+```bash
+# what Argo manages (are PV/PVC in git or hand-made?)
+kubectl -n argocd get application finance-qa -o jsonpath='{range .status.resources[*]}{.kind}/{.name}{"\n"}{end}'
+# sync policy (selfHeal would fight a manual suspend)
+kubectl -n argocd get application finance-qa -o jsonpath='{.spec.syncPolicy}{"\n"}'
+# a fresh backup, and prove it ran
+kubectl -n finance create job --from=cronjob/db-backup-daily pre-move-backup
+kubectl -n finance logs job/pre-move-backup
+# final etcd snapshot of the old cluster (kept as rollback evidence)
+sudo systemctl start etcd-snapshot.service && ls -lh /var/backups/etcd
+```
+The VM disk is destroyed in Phase 3, so copy that snapshot OFF the VM now, e.g. from your Mac:
+`scp root@prod-c1.rdulinux.com:/var/backups/etcd/etcd-*.db ~/`
+On `db`: the Postgres allow-list must accept the QA workers (`10.0.1.118`, `.10`, `.96`):
+```bash
+sudo grep -vE '^\s*(#|$)' /etc/postgresql/*/main/pg_hba.conf
+```
+If it lists individual prod IPs instead of `10.0.1.0/24`, add the QA IPs before Phase 1.
+
+## Phase 1 - prepare QA (nothing user-visible)
+1. **Free NodePort 30080 on QA.** The QA ingress-nginx owns it and has no apps, so remove it
+   for now (re-install later if wanted):
+   ```bash
+   # on qa-c1
+   kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.2/deploy/static/provider/baremetal/deploy.yaml
+   ```
+2. **Install Argo CD with the same version** on QA:
+   ```bash
+   # on qa-c1
+   kubectl create ns argocd
+   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.1/manifests/install.yaml
+   ```
+3. **Copy Argo config and repo credential** (on prod-c1):
+   ```bash
+   k8s-copy.sh qa-c1.rdulinux.com -n argocd configmap argocd-cm argocd-cmd-params-cm argocd-rbac-cm
+   k8s-copy.sh qa-c1.rdulinux.com -n argocd secret -l argocd.argoproj.io/secret-type=repository
+   ssh root@qa-c1.rdulinux.com kubectl -n argocd rollout restart deploy/argocd-server
+   ```
+4. **Finance namespace, secrets, storage** (on prod-c1):
+   ```bash
+   ssh root@qa-c1.rdulinux.com kubectl create ns finance
+   k8s-copy.sh qa-c1.rdulinux.com -n finance secret app-secret db-secret ghcr-secret
+   k8s-copy.sh qa-c1.rdulinux.com pv finance-backups finance-logs finance-uploads
+   k8s-copy.sh qa-c1.rdulinux.com -n finance pvc backups-pvc logs-pvc uploads-pvc
+   k8s-copy.sh qa-c1.rdulinux.com -n finance configmap nginx-config    # skip if Phase 0 shows it is in git
+   ```
+5. **Create the Application** and let it sync (on prod-c1):
+   ```bash
+   k8s-copy.sh qa-c1.rdulinux.com -n argocd application finance-qa
+   ```
+6. **Suspend the CronJobs on QA straight away** (prod keeps running them):
+   ```bash
+   # on qa-c1
+   kubectl -n finance patch cronjob db-backup-hourly db-backup-daily -p '{"spec":{"suspend":true}}'
+   ```
+   (If the Application has `selfHeal`, Argo may revert this; then pause its auto-sync instead.)
+7. **Verify on QA** without touching haproxy:
+   ```bash
+   kubectl -n finance get pods,pvc
+   curl -s -o /dev/null -w '%{http_code}\n' http://192.168.2.59:30080/     # compare with prod: curl http://192.168.2.152:30080/
+   ```
+   Backend must reach the DB: `kubectl -n finance logs deploy/backend --tail=30`.
+
+## Phase 2 - cut over to QA (seconds of impact)
+On `haproxy` (config is also in the repo: `cloud-init/haproxy.cfg`):
+```bash
+sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.pre-park
+# point k8s_nodes at the QA workers (port 30080 is the same on QA now)
+sudo sed -i -E '/^backend k8s_nodes/,/^$/ { s/192\.168\.2\.152/192.168.2.59/; s/192\.168\.2\.193/192.168.2.98/; s/192\.168\.2\.139/192.168.2.136/ }' /etc/haproxy/haproxy.cfg
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg && sudo systemctl reload haproxy
+```
+Then:
+```bash
+# prod: stop backups.   QA: start them.
+ssh root@prod-c1.rdulinux.com kubectl -n finance patch cronjob db-backup-hourly db-backup-daily -p '{"spec":{"suspend":true}}'
+ssh root@qa-c1.rdulinux.com   kubectl -n finance patch cronjob db-backup-hourly db-backup-daily -p '{"spec":{"suspend":false}}'
+```
+Argo UI during the rebuild (optional): on QA patch `argocd-server` to nodePort 30443 and point
+`backend argocd_nodes` at the QA IPs the same way.
+
+Check the real site, then wait a day if you want extra safety before Phase 3.
+
+## Phase 3 - rebuild prod (prod is idle)
+Final copy of anything not in git or NFS (nothing identified; re-check Phase 0 list).
+```bash
+cd environments/prod
+terraform apply \
+  -replace='module.node["prod-c1"].openstack_compute_instance_v2.this' \
+  -replace='module.node["prod-w1"].openstack_compute_instance_v2.this' \
+  -replace='module.node["prod-w2"].openstack_compute_instance_v2.this' \
+  -replace='module.node["prod-w3"].openstack_compute_instance_v2.this'
+```
+Read the plan: only the 4 instances (and nothing with `floatingip` or `port` being destroyed).
+The new nodes boot with hostnames `prod-*`; the controller runs `kubeadm init` and publishes
+`/nfsshare/join-prod.sh`; workers join by themselves. Expect `kubectl get nodes` to show
+`prod-c1 prod-w1 prod-w2 prod-w3` after ~3-5 minutes. SSH host keys change (clear known_hosts).
+
+## Phase 4 - move back
+Repeat Phase 1 steps 2-5 **from QA to prod** (reverse the direction; `k8s-copy.sh` works from
+`qa-c1` to `prod-c1.rdulinux.com`), with these differences:
+- no need to delete anything; prod has no ingress-nginx,
+- install the prod Argo with NodePort 30443 for `argo.rdulinux.com` (patch `argocd-server`).
+
+Then:
+```bash
+# haproxy back to the prod workers
+sudo cp /etc/haproxy/haproxy.cfg.pre-park /etc/haproxy/haproxy.cfg
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg && sudo systemctl reload haproxy
+# backups: QA off, prod on
+```
+Clean up QA: delete `finance` and `argocd` namespaces, optionally re-install ingress-nginx.
+Finally: take a new etcd snapshot on `prod-c1` (the timer is installed by cloud-init) and
+delete the old `/var/backups/etcd` evidence if you do not need it.
+
+## Rollback
+- Before Phase 3: restore `haproxy.cfg.pre-park`, re-enable prod CronJobs. Prod was never changed.
+- After Phase 3: QA is still serving; fix prod, or restore the old etcd snapshot onto a new control plane.

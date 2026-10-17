@@ -1,0 +1,24 @@
+# QA environment. Names are prefixed with "qa-" because all environments share
+# the rdulinux.com DNS zone and floating-IP pool; names must be unique there.
+
+defaults:
+  image: ubuntu2404
+  keypair: default-key
+  # IDs taken from v1 nodes/compute/compute.tf
+  security_group_ids:
+    - f00e0d86-c4f7-492d-893d-dab70cf732be  # default
+    - 80068ced-6e70-4977-aa86-3ae9b40d3c4e  # k8s
+  domain: rdulinux.com
+  vars:
+    dns_server: 192.168.2.2
+    nfs_server: repo.rdulinux.com
+    k8s_version: v1.30
+    calico_version: v3.28.0
+    pod_cidr: 192.168.0.0/16
+    cluster_name: qa
+
+nodes:
+  qa-c1: { role: controller, flavor: m1.medium }
+  qa-w1: { role: worker, flavor: m1.small }
+  qa-w2: { role: worker, flavor: m1.small }
+  qa-w3: { role: worker, flavor: m1.small }

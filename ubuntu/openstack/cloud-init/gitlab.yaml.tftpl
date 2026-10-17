@@ -1,0 +1,7 @@
+#cloud-config
+runcmd:
+  - apt-get install -y curl apt-transport-https ca-certificates lsb-release tzdata perl
+  - curl -fsSL https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | bash
+  - |
+    FLOATING_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+    EXTERNAL_URL="http://$FLOATING_IP" DEBIAN_FRONTEND=noninteractive apt-get install -y gitlab-ce

@@ -1,0 +1,37 @@
+#cloud-config
+write_files:
+  - path: /usr/local/sbin/etcd-snapshot
+    permissions: '0755'
+    content: |
+      ${indent(6, etcd_snapshot_script)}
+  - path: /etc/systemd/system/etcd-snapshot.service
+    content: |
+      ${indent(6, etcd_snapshot_service)}
+  - path: /etc/systemd/system/etcd-snapshot.timer
+    content: |
+      ${indent(6, etcd_snapshot_timer)}
+  - path: /etc/default/etcd-snapshot
+    content: |
+      REMOTE_DIR=/nfsshare/etcd-backups/${cluster_name}
+
+runcmd:
+  # the NFS share is common to all clusters, so join info is per cluster
+  - rm -f /nfsshare/join-${cluster_name}.sh
+  - echo "alias k='kubectl'" | tee -a /root/.bashrc /home/ubuntu/.bashrc
+  - |
+    LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+    PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+    kubeadm init \
+      --control-plane-endpoint "$PUBLIC_IP:6443" \
+      --apiserver-advertise-address "$LOCAL_IP" \
+      --pod-network-cidr ${pod_cidr} \
+      --cri-socket unix:///run/containerd/containerd.sock
+  - mkdir -p /home/ubuntu/.kube /root/.kube
+  - cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
+  - cp /etc/kubernetes/admin.conf /root/.kube/config
+  - chown ubuntu:ubuntu /home/ubuntu/.kube/config
+  - su ubuntu -c "kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/${calico_version}/manifests/calico.yaml"
+  - su ubuntu -c "kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml"
+  # publish join command for workers
+  - kubeadm token create --print-join-command > /nfsshare/join-${cluster_name}.sh && chmod +x /nfsshare/join-${cluster_name}.sh
+  - systemctl daemon-reload && systemctl enable --now etcd-snapshot.timer

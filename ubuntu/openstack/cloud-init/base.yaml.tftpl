@@ -1,0 +1,22 @@
+#cloud-config
+hostname: ${hostname}
+fqdn: ${fqdn}
+manage_etc_hosts: true
+ssh_pwauth: true
+disable_root: false
+
+write_files:
+  - path: /etc/resolv.conf.static
+    content: |
+      search ${domain}
+      nameserver ${dns_server}
+
+runcmd:
+  # Pin the hostname AFTER cloud-init has set it, so later boots never rename the
+  # node (a renamed k8s node can no longer register with the API server).
+  - "echo 'preserve_hostname: true' > /etc/cloud/cloud.cfg.d/99-keep-hostname.cfg"
+  - touch /root/.hushlogin /home/ubuntu/.hushlogin
+  - chown ubuntu:ubuntu /home/ubuntu/.hushlogin
+  - unlink /etc/resolv.conf || true
+  - cp /etc/resolv.conf.static /etc/resolv.conf
+  - apt-get update

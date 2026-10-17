@@ -1,0 +1,52 @@
+# Shared cloud infrastructure for every environment (prod, qa, ...).
+# Values copied from the v1 infra modules; change them here, not in the code.
+
+network:
+  external:
+    name: external_network
+    physical_network: physnet1
+    cidr: 192.168.2.0/24
+    gateway_ip: 192.168.2.1
+    pool_start: 192.168.2.51
+    pool_end: 192.168.2.150
+  private:
+    cidr: 10.0.1.0/24
+    gateway_ip: 10.0.1.1
+    dns_nameservers: [8.8.8.8]
+
+keypair:
+  name: default-key
+  public_key_path: ~/.ssh/id_ed25519.pub
+
+security_group:
+  name: k8s
+  description: K8s
+  ingress_rules:
+    icmp:          { protocol: icmp }
+    tcp-6443:      { protocol: tcp, port_min: 6443,  port_max: 6443 }
+    tcp-10250:     { protocol: tcp, port_min: 10250, port_max: 10250 }
+    tcp-10259:     { protocol: tcp, port_min: 10259, port_max: 10259 }
+    tcp-10257:     { protocol: tcp, port_min: 10257, port_max: 10257 }
+    tcp-2379-2380: { protocol: tcp, port_min: 2379,  port_max: 2380 }
+    tcp-443:       { protocol: tcp, port_min: 443,   port_max: 443 }
+
+images:
+  ubuntu2404: /nfsshare/qcow2/ubuntu2404.qcow2
+  debian13: /nfsshare/qcow2/debian13.qcow2
+
+dns:
+  zone: rdulinux.com.
+  reverse_zone: 2.168.192.in-addr.arpa.
+  email: admin@rdulinux.com
+  # name => ip; ptr: true also creates the reverse record. "@" is the zone apex.
+  # VM records (c1, w1, db, ...) are NOT here: the nodes stack creates those.
+  records:
+    c3:      { ip: 192.168.2.2, ptr: true }
+    repo:    { ip: 192.168.2.3, ptr: true }
+    backup:  { ip: 192.168.2.4, ptr: true }
+    haproxy: { ip: 192.168.2.5, ptr: true }
+    argo:    { ip: 192.168.2.5 }
+    qa:      { ip: 192.168.2.5 }
+    "@":     { ip: 13.140.58.46 }
+    www:     { ip: 13.140.58.46 }
+    rdu:     { ip: 13.140.58.46 }

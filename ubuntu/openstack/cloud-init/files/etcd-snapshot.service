@@ -1,0 +1,7 @@
+[Unit]
+Description=etcd snapshot
+After=containerd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/etcd-snapshot

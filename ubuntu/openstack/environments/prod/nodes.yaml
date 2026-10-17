@@ -1,0 +1,40 @@
+# Source of truth for VMs. Each key is a STABLE name: it is the Terraform
+# for_each key, the hostname and the DNS name. Adding/removing/reordering
+# entries never touches the other VMs.
+#
+# defaults:  applied to every node; any node can override a field.
+# vars:      free-form values rendered into the cloud-init templates.
+
+defaults:
+  image: ubuntu2404
+  keypair: default-key
+  # IDs taken from v1 nodes/compute/compute.tf
+  security_group_ids:
+    - f00e0d86-c4f7-492d-893d-dab70cf732be  # default
+    - 80068ced-6e70-4977-aa86-3ae9b40d3c4e  # k8s
+  domain: rdulinux.com
+  vars:
+    dns_server: 192.168.2.2
+    nfs_server: repo.rdulinux.com
+    k8s_version: v1.30
+    calico_version: v3.28.0
+    pod_cidr: 192.168.0.0/16
+    cluster_name: prod
+
+nodes:
+  # Migrated from v1 (adopted in place with scripts/adopt-node.sh):
+  db: { role: database, flavor: m1.small, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
+  # runner has default + k8s SGs, which equal the defaults, so no override needed.
+  runner: { role: runner, flavor: m1.large }
+
+  # DNS for haproxy (A/PTR, plus argo/qa aliases) is owned by the infra stack, so manage_dns: false.
+  haproxy: { role: loadbalancer, flavor: m1.small, manage_dns: false, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
+
+  # Kubernetes cluster. Naming: <env>-<role><n>, same as qa (qa-c1, qa-w1, ...).
+  # db, runner and haproxy are shared services and keep their plain names.
+  prod-c1: { role: controller, flavor: m1.medium }
+  prod-w1: { role: worker, flavor: m1.small }
+  prod-w2: { role: worker, flavor: m1.small }
+  prod-w3: { role: worker, flavor: m1.small }
+
+  # c2, w4, w5, w6 were decommissioned by removing them from this file.
