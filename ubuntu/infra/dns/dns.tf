@@ -62,6 +62,22 @@ resource "openstack_dns_recordset_v2" "haproxy_r" {
   ttl     = 3000
   records = ["haproxy.${var.dns_zone_name}"]
 }
+
+resource "openstack_dns_recordset_v2" "backup_f" {
+  zone_id = openstack_dns_zone_v2.forward.id
+  name    = "backup.${var.dns_zone_name}"
+  type    = "A"
+  ttl     = 3000
+  records = ["192.168.2.4"]
+}
+resource "openstack_dns_recordset_v2" "backup_r" {
+  zone_id = openstack_dns_zone_v2.reverse.id
+  name    = "4.${var.reverse_zone_name}"
+  type    = "PTR"
+  ttl     = 3000
+  records = ["backup.${var.dns_zone_name}"]
+}
+
 ########################################
 # Public Website
 ########################################
