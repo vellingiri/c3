@@ -24,8 +24,10 @@ outputs through its remote state (`openstack/infra/terraform.tfstate`).
   Editing a cloud-init template or a default never replaces a running VM.
   Rebuild one on purpose with
   `terraform apply -replace='module.node["<name>"].openstack_compute_instance_v2.this'`.
-- Environments share one DNS zone and floating-IP pool, so non-prod names are
-  prefixed (`qa-c1`, `qa-w1`, ...).
+- VM names never contain the environment. The environment is a tag and metadata on
+  the instance, port and floating IP (`openstack server list --tags qa`). DNS names stay
+  unique through the domain: prod `c1.rdulinux.com`, qa `c1.qa.rdulinux.com`.
+  OpenStack server names can repeat across environments; use the tag or the ID to tell them apart.
 - Per-cluster join info lives in `/nfsshare/join-<cluster_name>.sh`.
 - Records owned by `infra` (e.g. haproxy) use `manage_dns: false` on the node.
 - `image_cache_path` is ignored: it depends on whoever runs Terraform.
@@ -43,3 +45,31 @@ S3 (MinIO) bucket `terraform-state`: `openstack/infra/...`, `openstack/<env>/nod
 Needs `OS_*` credentials and the MinIO access keys in the environment.
 
 Retired stacks are kept for reference in `../archive/` and must never be applied.
+
+## Troubleshooting
+
+### `409 Port ... is still in use` after replacing a VM
+`terraform apply -replace='module.node["x"].openstack_compute_instance_v2.this'` deletes the VM but
+Nova may leave the old server ID in the port's `device_id`, so the new VM cannot attach it.
+Check, then clear it through the Neutron API (the `openstack port set --device ''` client call
+ignores empty values and does nothing):
+
+```bash
+openstack port show <port-id> -c device_id -c device_owner        # old, destroyed server ID?
+TOKEN=$(openstack token issue -f value -c id)
+curl -s -X PUT "http://192.168.2.2:9696/v2.0/ports/<port-id>" \
+  -H "X-Auth-Token: $TOKEN" -H "Content-Type: application/json" \
+  -d '{"port": {"device_id": "", "device_owner": ""}}'
+terraform apply                                                   # creates the VM on the same port and IP
+```
+The port, its fixed IP and its floating IP are kept.
+
+### Server names repeat across environments
+`c1`, `w1`... exist in both prod and qa by design (the environment is a tag, not part of the name).
+Use the ID, `--tags prod|qa`, or the `Env` column from `scripts/openstack-shortcuts.sh`.
+
+### `FloatingIPNotFound` while deleting an adopted VM
+Resources brought in with `adopt-node.sh` have no dependency info in state until an apply touches them,
+so on delete Terraform may destroy the floating IP association and the floating IP in parallel and the
+association fails ("floating IP could not be found"). The FIP is already gone, so just run
+`terraform apply` again; it drops the stale entries. VMs created by Terraform are not affected.

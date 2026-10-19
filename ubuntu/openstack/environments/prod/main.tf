@@ -42,6 +42,8 @@ module "node" {
   source   = "../../modules/node"
   for_each = local.nodes
 
+  environment = local.cfg.environment
+
   name               = each.key
   role               = each.value.role
   flavor             = each.value.flavor

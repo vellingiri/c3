@@ -1,21 +1,21 @@
-# Renamed during the move to <env>-<role><n> naming. Keeps the existing VMs
-# (no recreation); safe to delete once applied everywhere.
+# Names go back to plain (no environment prefix). Keeps the existing VMs.
+# Safe to delete once applied everywhere.
 moved {
-  from = module.node["c1"]
-  to   = module.node["prod-c1"]
+  from = module.node["prod-c1"]
+  to   = module.node["c1"]
 }
 
 moved {
-  from = module.node["w1"]
-  to   = module.node["prod-w1"]
+  from = module.node["prod-w1"]
+  to   = module.node["w1"]
 }
 
 moved {
-  from = module.node["w2"]
-  to   = module.node["prod-w2"]
+  from = module.node["prod-w2"]
+  to   = module.node["w2"]
 }
 
 moved {
-  from = module.node["w3"]
-  to   = module.node["prod-w3"]
+  from = module.node["prod-w3"]
+  to   = module.node["w3"]
 }

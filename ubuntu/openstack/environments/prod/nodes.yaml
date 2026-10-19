@@ -5,6 +5,8 @@
 # defaults:  applied to every node; any node can override a field.
 # vars:      free-form values rendered into the cloud-init templates.
 
+environment: prod   # tag/metadata on every resource; never part of a VM name
+
 defaults:
   image: ubuntu2404
   keypair: default-key
@@ -30,11 +32,10 @@ nodes:
   # DNS for haproxy (A/PTR, plus argo/qa aliases) is owned by the infra stack, so manage_dns: false.
   haproxy: { role: loadbalancer, flavor: m1.small, manage_dns: false, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
 
-  # Kubernetes cluster. Naming: <env>-<role><n>, same as qa (qa-c1, qa-w1, ...).
-  # db, runner and haproxy are shared services and keep their plain names.
-  prod-c1: { role: controller, flavor: m1.medium }
-  prod-w1: { role: worker, flavor: m1.small }
-  prod-w2: { role: worker, flavor: m1.small }
-  prod-w3: { role: worker, flavor: m1.small }
+  # Kubernetes cluster. VM names never contain the environment; it is a tag/metadata.
+  c1: { role: controller, flavor: m1.medium }
+  w1: { role: worker, flavor: m1.small }
+  w2: { role: worker, flavor: m1.small }
+  w3: { role: worker, flavor: m1.small }
 
   # c2, w4, w5, w6 were decommissioned by removing them from this file.

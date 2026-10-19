@@ -19,7 +19,13 @@ REVERSE_ZONE=${REVERSE_ZONE:-2.168.192.in-addr.arpa.}
 
 os() { openstack "$@"; }
 
-SERVER_ID=$(os server show "$NAME" -f value -c id)
+# VM names are not unique across environments (c1 exists in prod and qa); pass
+# SERVER_ID=<uuid> when the name matches more than one server.
+if [ -z "${SERVER_ID:-}" ]; then
+  MATCHES=$(os server list --name "^${NAME}\$" -f value -c ID)
+  [ "$(wc -w <<<"$MATCHES")" -eq 1 ] || { echo "'$NAME' matches: ${MATCHES:-nothing}. Re-run with SERVER_ID=<uuid>." >&2; exit 1; }
+  SERVER_ID=$MATCHES
+fi
 PORT_IDS=$(os port list --server "$SERVER_ID" -f value -c ID)
 [ "$(wc -w <<<"$PORT_IDS")" -eq 1 ] || { echo "expected exactly 1 port on $NAME, got: $PORT_IDS" >&2; exit 1; }
 PORT_ID=$PORT_IDS

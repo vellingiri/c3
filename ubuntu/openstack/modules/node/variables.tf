@@ -7,8 +7,8 @@ variable "role" {
   description = "Role selects which cloud-init parts are applied."
   type        = string
   validation {
-    condition     = contains(["controller", "worker", "gitlab", "runner", "database", "loadbalancer"], var.role)
-    error_message = "role must be one of: controller, worker, gitlab, runner, database, loadbalancer."
+    condition     = contains(["controller", "worker", "gitlab", "runner", "database", "loadbalancer", "learn"], var.role)
+    error_message = "role must be one of: controller, worker, gitlab, runner, database, loadbalancer, learn."
   }
 }
 
@@ -73,4 +73,9 @@ variable "manage_dns" {
   description = "Create the A/PTR records. Set false when another stack (e.g. infra) already owns them."
   type        = bool
   default     = true
+}
+
+variable "environment" {
+  description = "Environment label (prod, qa, ...). Stored as tag and metadata, never part of the VM name."
+  type        = string
 }

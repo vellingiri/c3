@@ -7,6 +7,7 @@ locals {
     runner       = ["base", "runner"]
     database     = ["base", "database"]
     loadbalancer = ["base", "haproxy"]
+    learn        = ["base", "learn"]
   }
 
   fqdn = "${var.name}.${var.domain}"
@@ -44,6 +45,7 @@ resource "openstack_networking_port_v2" "this" {
   name               = "${var.name}-port"
   network_id         = var.network_id
   security_group_ids = var.security_group_ids
+  tags               = [var.environment]
 
   fixed_ip {
     subnet_id = var.subnet_id
@@ -62,6 +64,13 @@ resource "openstack_compute_instance_v2" "this" {
   image_name  = var.image
   key_pair    = var.keypair
   user_data   = data.cloudinit_config.this.rendered
+  tags        = [var.environment, var.role]
+
+  metadata = {
+    env        = var.environment
+    role       = var.role
+    managed_by = "terraform"
+  }
 
   network {
     port = openstack_networking_port_v2.this.id
@@ -79,6 +88,7 @@ resource "openstack_compute_instance_v2" "this" {
 
 resource "openstack_networking_floatingip_v2" "this" {
   pool = var.floating_ip_pool
+  tags = [var.environment]
 }
 
 resource "openstack_networking_floatingip_associate_v2" "this" {

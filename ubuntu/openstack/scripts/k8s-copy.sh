@@ -3,7 +3,7 @@
 # so secrets only ever travel through the pipe. Run it ON the source controller:
 #
 #   k8s-copy.sh <dest-controller-host> <kubectl get args...>
-#   k8s-copy.sh qa-c1.rdulinux.com -n finance secret app-secret db-secret ghcr-secret
+#   k8s-copy.sh c1.qa.rdulinux.com -n finance secret app-secret db-secret ghcr-secret
 #
 # Strips cluster-specific fields (uid, resourceVersion, status, PV claimRef, Service clusterIP, ...)
 # so the object can be applied cleanly on the destination.
