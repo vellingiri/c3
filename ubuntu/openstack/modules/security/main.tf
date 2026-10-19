@@ -13,6 +13,12 @@ resource "openstack_networking_secgroup_rule_v2" "ingress" {
   port_range_min    = try(each.value.port_min, null)
   port_range_max    = try(each.value.port_max, null)
   remote_ip_prefix  = try(each.value.cidr, "0.0.0.0/0")
+
+  lifecycle {
+    # Changing the source range replaces the rule; build the new one first so
+    # there is never a moment without the rule.
+    create_before_destroy = true
+  }
 }
 
 # v1 had one hand-written resource per rule; map them onto the keyed rules.
@@ -49,4 +55,29 @@ moved {
 moved {
   from = openstack_networking_secgroup_rule_v2.allow_443
   to   = openstack_networking_secgroup_rule_v2.ingress["tcp-443"]
+}
+
+moved {
+  from = openstack_networking_secgroup_rule_v2.ingress["tcp-6443"]
+  to   = openstack_networking_secgroup_rule_v2.ingress["tcp-6443-lan"]
+}
+
+moved {
+  from = openstack_networking_secgroup_rule_v2.ingress["tcp-10250"]
+  to   = openstack_networking_secgroup_rule_v2.ingress["tcp-10250-lan"]
+}
+
+moved {
+  from = openstack_networking_secgroup_rule_v2.ingress["tcp-10259"]
+  to   = openstack_networking_secgroup_rule_v2.ingress["tcp-10259-lan"]
+}
+
+moved {
+  from = openstack_networking_secgroup_rule_v2.ingress["tcp-10257"]
+  to   = openstack_networking_secgroup_rule_v2.ingress["tcp-10257-lan"]
+}
+
+moved {
+  from = openstack_networking_secgroup_rule_v2.ingress["tcp-2379-2380"]
+  to   = openstack_networking_secgroup_rule_v2.ingress["tcp-2379-2380-lan"]
 }

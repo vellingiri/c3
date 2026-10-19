@@ -2,4 +2,5 @@
 runcmd:
   # workers join once the controller has published /nfsshare/join-${cluster_name}.sh
   - for i in $(seq 1 60); do [ -f /nfsshare/join-${cluster_name}.sh ] && break; sleep 10; done
-  - bash /nfsshare/join-${cluster_name}.sh || true
+  # retry: a single transient failure (API server briefly unreachable) must not leave the worker out
+  - 'for i in 1 2 3 4 5; do bash /nfsshare/join-${cluster_name}.sh && break; kubeadm reset -f; sleep 30; done'

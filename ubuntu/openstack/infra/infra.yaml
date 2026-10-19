@@ -21,14 +21,23 @@ keypair:
 security_group:
   name: k8s
   description: K8s
+  # Cluster ports (API, etcd, kubelet, controller-manager, scheduler) are reachable only from the
+  # lab LAN (192.168.2.0/24: floating IPs, your admin machines, haproxy) and the private subnet
+  # (10.0.1.0/24). Node-to-node traffic is also covered by the `default` group. 443 and ICMP stay open.
   ingress_rules:
-    icmp:          { protocol: icmp }
-    tcp-6443:      { protocol: tcp, port_min: 6443,  port_max: 6443 }
-    tcp-10250:     { protocol: tcp, port_min: 10250, port_max: 10250 }
-    tcp-10259:     { protocol: tcp, port_min: 10259, port_max: 10259 }
-    tcp-10257:     { protocol: tcp, port_min: 10257, port_max: 10257 }
-    tcp-2379-2380: { protocol: tcp, port_min: 2379,  port_max: 2380 }
-    tcp-443:       { protocol: tcp, port_min: 443,   port_max: 443 }
+    icmp:                  { protocol: icmp }
+    tcp-443:               { protocol: tcp, port_min: 443, port_max: 443 }
+
+    tcp-6443-lan:          { protocol: tcp, port_min: 6443,  port_max: 6443,  cidr: 192.168.2.0/24 }
+    tcp-6443-private:      { protocol: tcp, port_min: 6443,  port_max: 6443,  cidr: 10.0.1.0/24 }
+    tcp-10250-lan:         { protocol: tcp, port_min: 10250, port_max: 10250, cidr: 192.168.2.0/24 }
+    tcp-10250-private:     { protocol: tcp, port_min: 10250, port_max: 10250, cidr: 10.0.1.0/24 }
+    tcp-10259-lan:         { protocol: tcp, port_min: 10259, port_max: 10259, cidr: 192.168.2.0/24 }
+    tcp-10259-private:     { protocol: tcp, port_min: 10259, port_max: 10259, cidr: 10.0.1.0/24 }
+    tcp-10257-lan:         { protocol: tcp, port_min: 10257, port_max: 10257, cidr: 192.168.2.0/24 }
+    tcp-10257-private:     { protocol: tcp, port_min: 10257, port_max: 10257, cidr: 10.0.1.0/24 }
+    tcp-2379-2380-lan:     { protocol: tcp, port_min: 2379,  port_max: 2380,  cidr: 192.168.2.0/24 }
+    tcp-2379-2380-private: { protocol: tcp, port_min: 2379,  port_max: 2380,  cidr: 10.0.1.0/24 }
 
 images:
   ubuntu2404: /nfsshare/qcow2/ubuntu2404.qcow2
