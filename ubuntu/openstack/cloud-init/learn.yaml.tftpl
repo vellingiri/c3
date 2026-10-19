@@ -1,17 +1,7 @@
 #cloud-config
 # General-purpose VM for learning and experiments.
-package_update: true
-
-packages:
-  - git
-  - vim
-  - tmux
-  - curl
-  - wget
-  - jq
-  - unzip
-  - net-tools
-  - dnsutils
-  - build-essential
-  - python3-pip
-  - python3-venv
+# Packages are installed from runcmd with a lock timeout and retries: the cloud-init `packages:`
+# module can lose a race with the image's own apt timers right after first boot and fail the
+# whole install.
+runcmd:
+  - 'for i in 1 2 3 4 5; do DEBIAN_FRONTEND=noninteractive apt-get install -y -o DPkg::Lock::Timeout=120 git vim tmux curl wget jq unzip net-tools dnsutils build-essential python3-pip python3-venv && break; sleep 20; done'

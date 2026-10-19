@@ -23,6 +23,11 @@ output "dns_forward_zone_id" {
   value = module.dns.forward_zone_id
 }
 
+# Zone ID by zone name (trailing dot); the environments pick the zone matching their domain.
+output "dns_forward_zone_ids" {
+  value = module.dns.forward_zone_ids
+}
+
 output "dns_reverse_zone_id" {
   value = module.dns.reverse_zone_id
 }

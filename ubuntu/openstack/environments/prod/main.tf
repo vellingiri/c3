@@ -58,7 +58,7 @@ module "node" {
   network_id        = data.terraform_remote_state.infra.outputs.private_network_id
   subnet_id         = data.terraform_remote_state.infra.outputs.private_subnet_id
   floating_ip_pool  = data.terraform_remote_state.infra.outputs.external_network_name
-  forward_zone_id   = data.terraform_remote_state.infra.outputs.dns_forward_zone_id
+  forward_zone_id   = data.terraform_remote_state.infra.outputs.dns_forward_zone_ids["${each.value.domain}."]
   reverse_zone_id   = data.terraform_remote_state.infra.outputs.dns_reverse_zone_id
   reverse_zone_name = data.terraform_remote_state.infra.outputs.reverse_zone_name
 }

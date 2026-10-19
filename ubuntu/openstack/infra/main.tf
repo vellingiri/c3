@@ -29,6 +29,7 @@ module "image" {
 module "dns" {
   source            = "../modules/dns"
   zone_name         = local.cfg.dns.zone
+  extra_zones       = local.cfg.dns.extra_zones
   reverse_zone_name = local.cfg.dns.reverse_zone
   email             = local.cfg.dns.email
   records           = local.cfg.dns.records

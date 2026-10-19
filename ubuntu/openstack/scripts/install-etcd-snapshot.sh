@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install the etcd snapshot timer on an EXISTING controller (new controllers get it from cloud-init).
-#   scripts/install-etcd-snapshot.sh <controller-host> <cluster-name>   e.g. c1.rdulinux.com prod
+#   scripts/install-etcd-snapshot.sh <controller-host> <cluster-name>   e.g. c1.prod.rdulinux.com prod
 set -euo pipefail
 HOST=${1:?controller host}
 CLUSTER=${2:?cluster name (prod|qa)}

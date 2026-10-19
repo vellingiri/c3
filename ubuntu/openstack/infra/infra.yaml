@@ -44,18 +44,23 @@ images:
   debian13: /nfsshare/qcow2/debian13.qcow2
 
 dns:
-  zone: rdulinux.com.
+  zone: rdulinux.com.            # main zone: shared services and static names
+  extra_zones:                   # one zone per environment; its VMs register here
+    - prod.rdulinux.com.
+    - qa.rdulinux.com.
   reverse_zone: 2.168.192.in-addr.arpa.
   email: admin@rdulinux.com
-  # name => ip; ptr: true also creates the reverse record. "@" is the zone apex.
-  # VM records (c1, w1, db, ...) are NOT here: the nodes stack creates those.
+  # key => {ip, ptr?, zone?, name?}. zone defaults to the main zone, name to the key,
+  # name "@" is the apex of the record's zone. ptr: true also creates the reverse record.
+  # VM records (c1, w1, db, ...) are NOT here: the nodes stacks create those.
   records:
     c3:      { ip: 192.168.2.2, ptr: true }
     repo:    { ip: 192.168.2.3, ptr: true }
     backup:  { ip: 192.168.2.4, ptr: true }
     haproxy: { ip: 192.168.2.5, ptr: true }
     argo:    { ip: 192.168.2.5 }
-    qa:      { ip: 192.168.2.5 }
     "@":     { ip: 13.140.58.46 }
     www:     { ip: 13.140.58.46 }
     rdu:     { ip: 13.140.58.46 }
+    # qa.rdulinux.com is now the apex of its own zone (a record in the parent zone would be shadowed)
+    qa-apex: { name: "@", zone: qa.rdulinux.com., ip: 192.168.2.5 }

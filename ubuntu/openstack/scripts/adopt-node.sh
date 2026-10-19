@@ -4,7 +4,8 @@
 #   scripts/adopt-node.sh <env-dir> <vm-name>          # show IDs + the import commands (changes nothing)
 #   scripts/adopt-node.sh <env-dir> <vm-name> --run    # run the imports
 #
-# NO_DNS=1 skips the A/PTR records (use with manage_dns: false when another
+# DOMAIN=<zone without dot> selects the node's DNS zone (default rdulinux.com; prod k8s nodes use
+# prod.rdulinux.com). NO_DNS=1 skips the A/PTR records (use with manage_dns: false when another
 # stack, e.g. infra, owns them).
 #
 # Needs: openstack CLI + OS_* creds, jq, terraform (with S3 backend creds), and
