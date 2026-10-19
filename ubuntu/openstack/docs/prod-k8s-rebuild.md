@@ -146,3 +146,26 @@ delete the old `/var/backups/etcd` evidence if you do not need it.
 ## Rollback
 - Before Phase 3: restore `haproxy.cfg.pre-park`, re-enable prod CronJobs. Prod was never changed.
 - After Phase 3: QA is still serving; fix prod, or restore the old etcd snapshot onto a new control plane.
+
+## Executed 2026-10-19 (what actually happened, and what differed from the plan above)
+Result: prod VMs rebuilt with correct hostnames and node names; no user-visible outage (haproxy swapped twice, a reload each).
+
+- **Gate before touching anything:** the finance DB backup was restored into a scratch database (85/85 tables, identical row
+  counts) and an etcd snapshot restore was rehearsed on QA first. See `finance-db-restore.md` and `etcd-restore-rehearsal.md`.
+  A safety tarball of NFS `uploads` + `backups` went to `backup:/backup/finance-qa/pre-rebuild-20261019/`.
+- **Argo manages everything in `finance`** (namespace, PVs/PVCs, NetworkPolicies, Services, Deployments, CronJobs) with
+  `automated: {prune, selfHeal}`. So only what is NOT in git had to be copied: the 3 finance secrets, Argo's repo credentials,
+  `argocd-secret` (keeps the admin login) and the `server.insecure` setting in `argocd-cmd-params-cm`.
+- **CronJobs:** `selfHeal` reverts a manual suspend, so the parked Application was created with auto-sync OFF and synced
+  without the two CronJobs; they were synced onto the other cluster only after the first one was suspended.
+  The original Application (with auto-sync) was saved first: `~/finance-argo-application.prod.json`.
+- **Same images, same git revision** on both clusters; public paths compared by status + content hash before each switch.
+- **Use `scripts/k8s-copy-between.sh`** (two local kubeconfigs) instead of `k8s-copy.sh`; secrets never touch disk or the screen.
+  Always pass `--context`: `ktx` leaves `current-context` pointing at the other cluster in both kubeconfig files.
+- **QA's ingress-nginx must be removed while parked** (it owns NodePort 30080); `scripts/install-ingress-nginx.sh` restores it.
+- **`cloud-init status` says `error - running` during `kubeadm init`.** That is the harmless `update-locale` message plus
+  "still running"; wait for `done` (about 3 minutes). Workers joined on their own (join retry).
+- **After the rebuild** the kubeconfig had to be replaced (new CA): fetch `~/.kube/config` from the controller and rename
+  the entries to the context names you use.
+- **haproxy:** restore the saved `haproxy.cfg.pre-park` rather than reversing the edit with `sed` (the QA backend has
+  identical-looking lines). A copy of the parked config is kept as `haproxy.cfg.parked-on-qa`.

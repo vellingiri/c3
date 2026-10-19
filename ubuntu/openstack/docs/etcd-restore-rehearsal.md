@@ -57,3 +57,12 @@ Same steps on the replacement control plane after `kubeadm init` has NOT yet run
 node with its etcd data dir removed), using the newest file from `/nfsshare/etcd-backups/prod/`.
 Snapshots contain the cluster's Secrets in plain form: keep them root-only (`0600`) and off public storage.
 Expect to lose changes made after the last snapshot (timer: every 6 hours).
+
+## Rehearsal log
+- **2026-10-19, QA (`c1.qa.rdulinux.com`, etcd 3.5.15, Kubernetes 1.30.14): passed.**
+  Snapshot 4.6 MB (revision 14918, 1,498 keys), also copied to `/nfsshare/etcd-backups/qa/`.
+  The marker ConfigMap deleted after the snapshot came back after the restore; all 4 nodes `Ready`,
+  no failing pods, etcd healthy, ingress still answering. API server back about 25 s after etcd was restarted.
+- Use the `etcdutl` release matching the cluster's etcd (`etcdctl version` inside the etcd container).
+- The restore needs the member `--name` and `--initial-advertise-peer-urls` from the etcd static pod
+  manifest (here `c1`, `https://10.0.1.66:2380`); the commands above read them from the manifest.

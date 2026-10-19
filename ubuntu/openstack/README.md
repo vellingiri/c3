@@ -8,6 +8,7 @@ environments/qa/         VMs for qa                           (nodes.yaml)
 modules/                 network, security, keypair, image, dns, node
 cloud-init/*.tftpl       reusable cloud-init parts, composed per role
 scripts/adopt-node.sh    bring an existing VM under Terraform without recreating it
+scripts/k8s-copy-between.sh  copy k8s objects between clusters through two local kubeconfigs (secrets stay in the pipe)
 ```
 
 Apply order: `infra` first, then `environments/<env>`. Environments read infra's
