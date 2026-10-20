@@ -29,11 +29,11 @@ outputs through its remote state (`openstack/infra/terraform.tfstate`).
   the instance, port and floating IP (`openstack server list --tags qa`).
 - Each environment has its own DNS zone, set by `domain` in its `nodes.yaml`: prod nodes live
   in `prod.rdulinux.com` (`c1.prod.rdulinux.com`), qa in `qa.rdulinux.com` (`c1.qa.rdulinux.com`).
-  Zones are listed in `infra/infra.yaml` (`dns.extra_zones`). Shared services (`db`, `runner`,
-  `haproxy`) override `domain: rdulinux.com` so names like `db.rdulinux.com` keep working.
+  Zones are listed in `infra/infra.yaml` (`dns.extra_zones`). Shared services (`db`, `runner`)
+  override `domain: rdulinux.com` so names like `db.rdulinux.com` keep working.
   OpenStack server names can repeat across environments; use the tag or the ID to tell them apart.
 - Per-cluster join info lives in `/nfsshare/join-<cluster_name>.sh`.
-- Records owned by `infra` (e.g. haproxy) use `manage_dns: false` on the node.
+- Records owned by `infra` (e.g. the load balancer name) use `manage_dns: false` on the node.
 - `image_cache_path` is ignored: it depends on whoever runs Terraform.
 
 ## Adopting an existing VM

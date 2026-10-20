@@ -1,5 +1,8 @@
 # Rebuild the prod k8s cluster (park workloads on QA)
 
+> Historical: written when `haproxy` was the front door. It was replaced by the Octavia load balancer and the VM was
+> destroyed (see `octavia-finance-lb.md`). For a future rebuild, edit the load balancer pool members instead of haproxy.cfg.
+
 Goal: recreate `c1`, `w1..3` from the current cloud-init (proper hostnames /
 node names) with almost no downtime, by running the workloads on the QA cluster meanwhile.
 

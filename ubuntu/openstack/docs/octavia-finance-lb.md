@@ -1,14 +1,14 @@
 # Octavia load balancer for the finance app (prod)
 
 Goal: put the prod finance app behind an Octavia load balancer that health-checks the workers and survives the loss
-of one of its own nodes, instead of the single `haproxy` VM (`192.168.2.5`). Built 2026-10-20 with the OpenStack CLI
-on `c3` (not Terraform-managed). The old haproxy is untouched and is the rollback path.
+of one of its own nodes, instead of the single `haproxy` VM that used to own `192.168.2.5`. Built 2026-10-20 with the OpenStack CLI
+on `c3` (not Terraform-managed). The old haproxy VM was destroyed afterwards (see "Old haproxy VM" below).
 
 ## What exists
 | Object | Value |
 |---|---|
 | Load balancer | `finance-lb`, flavor `ha` (**ACTIVE_STANDBY**: two amphorae, VRRP failover) |
-| VIP / floating IP | `10.0.1.89` on `private_subnet` / **`192.168.2.119`** |
+| VIP / floating IP | `10.0.1.89` on `private_subnet` / **`192.168.2.5`** (after the cutover below) |
 | Listener | `finance-http` HTTP :80, inserts `X-Forwarded-For` |
 | Pool `finance-pool` | workers `w2 10.0.1.197`, `w3 10.0.1.45`, `w4 10.0.1.206`, `w5 10.0.1.33` : **30080** (nginx NodePort), HTTP monitor `GET /health` = 200 |
 | Pool `argo-pool` | same workers : **30443** (Argo CD), HTTP monitor `GET /healthz` = 200 |
@@ -60,7 +60,9 @@ openstack floating ip unset --port 192.168.2.119                              # 
 openstack floating ip set --port <finance-lb vip_port_id> 192.168.2.5         # .5 moves to the LB
 openstack floating ip set --port <haproxy VM port id> 192.168.2.119           # the old haproxy VM keeps a reachable address
 ```
-The old haproxy VM is unchanged and now at **192.168.2.119** (`ssh root@192.168.2.119`). **Rollback** = the reverse swap:
+The old haproxy VM was left running at **192.168.2.119** as a rollback path, with the reverse swap below. It was
+retired on 2026-10-20 (no traffic for 30+ minutes, nothing referenced it), so the rollback no longer exists.
+Kept for history only:
 ```bash
 openstack floating ip unset --port 192.168.2.119
 openstack floating ip set --port <finance-lb vip_port_id> 192.168.2.119
@@ -68,17 +70,12 @@ openstack floating ip set --port <haproxy VM port id> 192.168.2.5
 ```
 Not carried over from haproxy: its `qa.rdulinux.com` -> QA-cluster route (`qa.` now lands on the finance app by design).
 
-### Terraform follow-up (prod environment) - do this BEFORE the next `terraform apply` there
-Terraform still believes floating IP .5 belongs to the haproxy VM and would re-attach it, pulling it away from the load balancer.
-Make it adopt .119 as the VM's floating IP instead (state-only, no OpenStack changes):
-```bash
-cd environments/prod
-terraform state rm 'module.node["haproxy"].openstack_networking_floatingip_associate_v2.this' 'module.node["haproxy"].openstack_networking_floatingip_v2.this'
-terraform import 'module.node["haproxy"].openstack_networking_floatingip_v2.this' d9c7b9df-7541-4fdd-9272-1a7ad037bff8
-terraform import 'module.node["haproxy"].openstack_networking_floatingip_associate_v2.this' d9c7b9df-7541-4fdd-9272-1a7ad037bff8
-terraform plan    # expect at most in-place tag updates; nothing touching 192.168.2.5
-```
-The DNS name `haproxy.rdulinux.com` (infra.yaml) still points at .5, which is now the load balancer.
+## Old haproxy VM (retired 2026-10-20)
+Removed from `environments/prod/nodes.yaml`; `terraform apply` destroys the VM, its port and floating IP `.119`. The
+`loadbalancer` role, `cloud-init/haproxy.*` and the `haproxy` ssh alias were deleted. Its last config is in git history
+(`cloud-init/haproxy.cfg`). The DNS name `haproxy.rdulinux.com` is kept and points at `.5`, the load balancer.
+Before this, Terraform had to adopt `.119` as the VM's floating IP (`terraform state rm` + `import` of the association)
+so that it would not re-attach `.5`; that is no longer relevant.
 
 ## Workers change over time (pools are static)
 Octavia pools do not follow Kubernetes nodes. When a worker is added or retired, edit BOTH pools by hand:

@@ -1,5 +1,0 @@
-#cloud-config
-# Only used when a load balancer VM is (re)built; adopted VMs keep their first-boot config.
-runcmd:
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y haproxy
-  - systemctl enable --now haproxy

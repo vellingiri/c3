@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install ingress-nginx on a cluster as a NodePort (default 30080, the port haproxy routes to).
+# Install ingress-nginx on a cluster as a NodePort (default 30080, the port the load balancer used to route to).
 #   scripts/install-ingress-nginx.sh <controller-host> [nodeport]    e.g. c1.qa.rdulinux.com
 # Safe to re-run. Do not use on a cluster where another service already owns the NodePort.
 set -euo pipefail

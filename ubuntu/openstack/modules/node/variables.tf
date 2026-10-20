@@ -7,8 +7,8 @@ variable "role" {
   description = "Role selects which cloud-init parts are applied."
   type        = string
   validation {
-    condition     = contains(["controller", "worker", "gitlab", "runner", "database", "loadbalancer", "learn"], var.role)
-    error_message = "role must be one of: controller, worker, gitlab, runner, database, loadbalancer, learn."
+    condition     = contains(["controller", "worker", "gitlab", "runner", "database", "learn"], var.role)
+    error_message = "role must be one of: controller, worker, gitlab, runner, database, learn."
   }
 }
 

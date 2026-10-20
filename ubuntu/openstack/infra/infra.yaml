@@ -22,7 +22,7 @@ security_group:
   name: k8s
   description: K8s
   # Cluster ports (API, etcd, kubelet, controller-manager, scheduler) are reachable only from the
-  # lab LAN (192.168.2.0/24: floating IPs, your admin machines, haproxy) and the private subnet
+  # lab LAN (192.168.2.0/24: floating IPs, your admin machines, the Octavia load balancer) and the private subnet
   # (10.0.1.0/24). Node-to-node traffic is also covered by the `default` group. 443 and ICMP stay open.
   ingress_rules:
     icmp:                  { protocol: icmp }
@@ -57,7 +57,7 @@ dns:
     c3:      { ip: 192.168.2.2, ptr: true }
     repo:    { ip: 192.168.2.3, ptr: true }
     backup:  { ip: 192.168.2.4, ptr: true }
-    haproxy: { ip: 192.168.2.5, ptr: true }
+    haproxy: { ip: 192.168.2.5, ptr: true }   # name kept for old links; 192.168.2.5 is the Octavia load balancer
     argo:    { ip: 192.168.2.5 }
     "@":     { ip: 13.140.58.46 }
     www:     { ip: 13.140.58.46 }

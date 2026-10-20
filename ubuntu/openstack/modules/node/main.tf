@@ -6,7 +6,6 @@ locals {
     gitlab       = ["base", "gitlab"]
     runner       = ["base", "runner"]
     database     = ["base", "database"]
-    loadbalancer = ["base", "haproxy"]
     learn        = ["base", "learn"]
   }
 
