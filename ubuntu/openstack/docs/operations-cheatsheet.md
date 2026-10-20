@@ -6,7 +6,7 @@ Commands you need every week, and a "is everything healthy?" sweep. Details live
 ### ssh (aliases in `~/.ssh/config`)
 | You type | Goes to | Notes |
 |---|---|---|
-| `ssh c1` `ssh w1` ... `ssh w5` | `<name>.prod.rdulinux.com` | prod Kubernetes nodes, user root, key `id_ed25519` |
+| `ssh c1` `ssh w1` ... `ssh w3` | `<name>.prod.rdulinux.com` | prod Kubernetes nodes, user root, key `id_ed25519` |
 | `ssh c1.prod` `ssh w2.qa` `ssh learn.qa` | `<name>.<env>.rdulinux.com` | any VM, either environment (`w1` exists in both: `ssh w1.prod`, `ssh w1.qa`) |
 | `ssh db1` `ssh db2` `ssh db-witness` | the two database VMs and the etcd tie-breaker VM | key `id_ed25519.c3`. On db1/db2: `patronictl list` |
 | `ssh db` | whoever `db.rdulinux.com` points at (the primary) | after a failover your Mac may cache the old answer: `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` |
@@ -41,7 +41,7 @@ Never `apply` in `../archive/*` (retired). `terraform plan` clean on all three s
 ### kubectl (two clusters, never rely on the current context)
 ```bash
 k() { kubectl --kubeconfig ~/.kube/prod -n finance "$@"; }            # use a function: K="kubectl ..." breaks in zsh
-kubectl --kubeconfig ~/.kube/prod get nodes                           # prod: c1 w1 w2 w3 w4 w5
+kubectl --kubeconfig ~/.kube/prod get nodes                           # prod: c1 w1 w2 w3
 kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w1 w2 w3 (spare)
 ```
 
@@ -53,7 +53,7 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 | Argo | `curl -s -o /dev/null -w '%{http_code}\n' http://argo.rdulinux.com/` | 200 |
 | OVN VIP watcher | `ssh c3 'systemctl is-active ovn-vip-binding.timer; openstack loadbalancer amphora list'` | `active`; all amphorae `ALLOCATED` |
 | Load balancers | `ssh c3 'openstack loadbalancer list; openstack loadbalancer member list finance-pool; openstack loadbalancer member list argo-backend'` | `ACTIVE`/`ONLINE`, 4 members `ONLINE` each |
-| Kubernetes | `kubectl --kubeconfig ~/.kube/prod get nodes` and `k get pods -o wide` and `k get pdb` | 6 nodes Ready (c1 + w1 to w5); 3 of backend, frontend, docs, nginx, each on a different node |
+| Kubernetes | `kubectl --kubeconfig ~/.kube/prod get nodes` and `k get pods -o wide` and `k get pdb` | 4 nodes Ready (c1 + w1 to w3); 3 of backend, frontend, docs, nginx, each on a different node |
 | Argo app | `kubectl --kubeconfig ~/.kube/prod -n argocd get application finance-qa` | Synced, Healthy |
 | Database path | `k exec deploy/backend -- sh -c 'psql "$DATABASE_URL" -qAt -c "select inet_server_addr(), pg_is_in_recovery()"'` | the current leader's address, `f` (after a failover this is `10.0.1.69`, which is fine) |
 | Patroni | `ssh db1 patronictl list` | one `Leader running`, one `Replica streaming`, lag 0, same TL |

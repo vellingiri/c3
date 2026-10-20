@@ -40,7 +40,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 ### Kubernetes
 | Cluster | Zone | Nodes (floating / private IP) |
 |---|---|---|
-| **prod** | `prod.rdulinux.com` | `c1` .103 / 10.0.1.254 (control plane), `w1` .52 / .67, `w2` .193 / .197, `w3` .139 / .45, `w4` .60 / .206, `w5` .82 / .33 |
+| **prod** | `prod.rdulinux.com` | `c1` .103 / 10.0.1.254 (control plane), `w1` .52 / .67, `w2` .193 / .197, `w3` .139 / .45 (`w4` and `w5` were retired 2026-10-20; the cluster is now c1 + 3 workers) |
 | **qa** | `qa.rdulinux.com` | `c1` .120 / 10.0.1.66, `w1` .59 / .118, `w2` .98 / .10, `w3` .136 / .96, plus the `learn` VM .65 / .225 |
 Kubernetes 1.30, Calico, pod CIDR `192.168.0.0/16`. Names have no environment prefix: `ssh c1.prod`, `ssh w2.qa`. Server names repeat across environments by design.
 (Floating IPs here are the last octet of `192.168.2.x`.)
@@ -53,7 +53,7 @@ browser / curl
 Octavia finance-lb (2 amphora VMs, active/standby, VRRP)          http://argo.rdulinux.com -> 192.168.2.113 -> argo-lb (1 amphora)
    |  health check GET /health on each worker, round robin                |  health check GET /healthz
    v                                                                      v
-worker NodePort 30080 (w1..w5)                                    worker NodePort 30443 (w1..w5) -> argocd-server
+worker NodePort 30080 (w1..w3)                                    worker NodePort 30443 (w1..w3) -> argocd-server
    |  kube-proxy
    v
 nginx pods (3, one per node)  ->  /api -> backend (3)   /docs -> docs (3)   / -> frontend (3)

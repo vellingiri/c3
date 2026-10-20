@@ -29,6 +29,11 @@ Update this file in the same commit as any change, and list anything done **by h
 - **Proven on the primary too:** switchover to `db2` (`patronictl switchover`), then `db1` was replaced; it needed one plain `terraform apply` because its old Nova-made port had been deleted with the VM (`docs/port-unbind-fix.md`), then rebuilt itself and streams from `db2`. **`db2` is now the primary and `db1` the replica**; roles can stay that way (names do not matter, the app finds the writable host).
 - **OpenStack actions taken during this work (all reverted):** QA VMs `learn`, `w2` and `w3` were stopped for a scratch rehearsal and started again; the three scratch VMs `dbt1`, `dbt2`, `dbt-witness` (and their ports) failed with NoValidHost (stopped VMs keep their memory reserved) and were deleted; a test VM `porttest` and its port were created and deleted to prove the port fix; the stale port of the replaced witness had its `device_id` cleared by hand once; the VMs `db-witness` and `db2` were replaced through Terraform (new VMs, same addresses, same names).
 
+### Capacity and cleanup done the same day (OpenStack, by hand)
+- `ram_allocation_ratio` 1.1 -> 1.2 on `c3` (nova.conf + nova-compute restart); see `docs/port-unbind-fix.md`.
+- `w4` and `w5` retired: VMs removed through Terraform, then their load balancer pool members and Kubernetes nodes deleted. **Prod now has 3 workers, no spare node**: draining one blocks until it is back (`docs/k8s-operations.md`). VM count 16.
+- The whole database group was rebuilt from nothing on three scratch VMs (deleted afterwards); it found and fixed a startup race in `db-ha-node.sh`.
+
 ### Limits
 Asynchronous replication (a hard failure can lose the last seconds of writes); losing two of the three etcd machines stops automatic failover.
 

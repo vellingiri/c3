@@ -82,15 +82,26 @@ for ip in $OTHERS; do
   if etcdctl --endpoints="http://$ip:2379" --command-timeout=4s endpoint health >/dev/null 2>&1; then PEER=$ip; break; fi
 done
 if [ -n "$PEER" ]; then
-  echo "== an etcd cluster is already running (via $PEER): joining it"
   EP="http://$PEER:2379"
-  # a lost machine of the same name/address (or an entry made by a cluster that is still forming) must go first, or `member add` is refused
-  etcdctl --endpoints="$EP" member list | awk -F', ' -v n="$ME" -v u="http://$MYIP:2380" '$3==n || $4==u {print $1}' |
-    while read -r id; do echo "removing stale member $id"; etcdctl --endpoints="$EP" member remove "$id"; done
-  OUT=$(etcdctl --endpoints="$EP" member add "$ME" --peer-urls="http://$MYIP:2380")
-  CLUSTER=$(echo "$OUT" | sed -n 's/^ETCD_INITIAL_CLUSTER="\(.*\)"$/\1/p')
-  [ -n "$CLUSTER" ] || { echo "member add gave no ETCD_INITIAL_CLUSTER:" >&2; echo "$OUT" >&2; exit 1; }
-  STATE=existing
+  LISTING=$(etcdctl --endpoints="$EP" member list)
+  if echo "$LISTING" | awk -F', ' -v u="http://$MYIP:2380" '$2=="unstarted" && $4==u {f=1} END{exit !f}'; then
+    # A brand-new group is still forming and the others already have a majority: this node is in their list but has not started yet.
+    # It must NOT be removed and re-added (etcd refuses while the group is not fully up); it just starts with the original list and connects.
+    echo "== the group is still forming and already lists this node: starting with the original member list"
+  else
+    echo "== an etcd cluster is already running (via $PEER): joining it"
+    # a lost machine of the same name/address must go first, or `member add` is refused
+    echo "$LISTING" | awk -F', ' -v n="$ME" -v u="http://$MYIP:2380" '$3==n || $4==u {print $1}' |
+      while read -r id; do echo "removing stale member $id"; etcdctl --endpoints="$EP" member remove "$id"; done
+    OUT=""
+    for i in $(seq 1 12); do   # etcd refuses a change for a few seconds while the group settles ("unhealthy cluster")
+      OUT=$(etcdctl --endpoints="$EP" member add "$ME" --peer-urls="http://$MYIP:2380" 2>&1) && break
+      echo "member add not accepted yet: $(echo "$OUT" | tail -1)"; OUT=""; sleep 10
+    done
+    CLUSTER=$(echo "$OUT" | sed -n 's/^ETCD_INITIAL_CLUSTER="\(.*\)"$/\1/p')
+    [ -n "$CLUSTER" ] || { echo "member add never succeeded" >&2; exit 1; }
+    STATE=existing
+  fi
 else
   echo "== no etcd answers: starting as part of a new cluster of $MEMBERS"
 fi

@@ -76,7 +76,7 @@ Change PostgreSQL settings with `patronictl edit-config` (cluster-wide, stored i
 - **Replication is asynchronous.** In a hard failure the last moments of writes (up to the 1 MB lag guard; in a partition up to ~20 s) can be lost.
   Synchronous mode (`synchronous_mode: true`) would remove that at the price of writes stalling whenever the replica is unreachable; not chosen.
 - **Two machines lost at once** (witness plus one DB) means no majority: no automatic failover, and the surviving DB demotes. Fix by bringing a VM back.
-- **Memory:** after the witness VM, Nova has only ~1.1 GB headroom. A two-amphora rebuild of `finance-lb` needs ~4 GB. Raising `ram_allocation_ratio`
+- **Memory:** `ram_allocation_ratio` on `c3` was raised from 1.1 to 1.2 on 2026-10-20 (see `port-unbind-fix.md`, section on capacity), giving about 9 GB of headroom for rebuilds of `finance-lb` (~4 GB) and test VMs.
   from 1.1 to 1.2 is possible but not done (your decision).
 - The monitor cannot ask etcd directly (firewall); it uses Patroni's `dcs_last_seen` and a TCP check of the witness.
 
@@ -132,5 +132,5 @@ Existing VMs are untouched (user data is ignored after first boot); `scripts/db-
 - `db2` replaced (new VM, same address): etcd joined, Patroni copied the leader and became `Replica streaming`, lag 0, in about 2 minutes (VM up 16:53:46, done 16:54:32). Same 85 tables and the roles `financeapp`/`monitor`/`replicator` as `db1`; monitor green; app path unchanged; front door 200.
 - A first attempt at the witness replace failed on a Neutron policy problem, fixed on `c3` (`port-unbind-fix.md`).
 - `db1` replaced after a planned switchover to `db2`: same result (replica streaming, lag 0, about 2 minutes after the VM was created). It needed a plain `terraform apply` first because of an old Nova-made port (`port-unbind-fix.md`). `db2` is now the Leader.
-Not yet exercised: building the whole group from nothing (both database VMs and the witness new at once).
+- **Whole group built from nothing, rehearsed on scratch VMs** (three throwaway VMs `dbt1`, `dbt2`, `dbt-witness` on spare addresses, same cloud-init, deleted afterwards): all three came up together, formed a new etcd cluster, one database initialised an empty cluster and became Leader, the other copied it and was `Replica streaming`, lag 0. This rehearsal found a bug that is fixed in `db-ha-node.sh`: when the last node boots after the other two have already formed a majority, it used to remove itself from the member list and then be refused (`unhealthy cluster`); it now recognises "listed but not started" and just starts with the original list, and `member add` retries. The empty cluster needs the data restored afterwards (`finance-db-restore.md`).
 Still outside Terraform: the monitor copy on the runner (`scripts/install-db-monitor.sh`).

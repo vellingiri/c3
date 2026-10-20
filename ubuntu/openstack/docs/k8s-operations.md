@@ -4,7 +4,7 @@ Runbook for day-to-day and for node changes. Facts checked against the manifests
 Where things are: `ARCHITECTURE.md`. Rebuilding a whole cluster: `prod-k8s-rebuild.md`.
 
 ## How the app is built to survive a node loss (since 2026-10-20)
-Every app (`backend`, `frontend`, `docs`, `nginx`) runs **3 replicas, one per node**, on the 5 workers (`w1` to `w5`), so two workers are always free.
+Every app (`backend`, `frontend`, `docs`, `nginx`) runs **3 replicas, one per node**, on the 3 workers (`w1` to `w3`) since `w4` and `w5` were retired on 2026-10-20. **There is no free node any more:** draining a worker now leaves one replica per app pending until the node is back (the PodDisruptionBudgets hold the drain), so add a 4th worker before planned node work (`Add a worker` below).
 | Setting | Value | Why |
 |---|---|---|
 | `replicas` | 3 | one can be lost or updated while 2 still serve |
