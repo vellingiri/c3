@@ -4,3 +4,6 @@ runcmd:
   - for i in $(seq 1 60); do [ -f /nfsshare/join-${cluster_name}.sh ] && break; sleep 10; done
   # retry: a single transient failure (API server briefly unreachable) must not leave the worker out
   - 'for i in 1 2 3 4 5; do bash /nfsshare/join-${cluster_name}.sh && break; kubeadm reset -f; sleep 30; done'
+  # kubelet graceful node shutdown: on a host reboot/ACPI power-off the kubelet stops the pods (30 s) while the network and the NFS mounts are still up.
+  # Without it the pods' processes were killed after the network was gone, hung, and a worker took ~4.5 min to power off (docs/c3-reboot.md).
+  - "sed -i 's/^shutdownGracePeriod: 0s/shutdownGracePeriod: 30s/; s/^shutdownGracePeriodCriticalPods: 0s/shutdownGracePeriodCriticalPods: 10s/' /var/lib/kubelet/config.yaml && systemctl restart kubelet"

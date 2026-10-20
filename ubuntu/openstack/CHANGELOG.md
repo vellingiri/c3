@@ -45,6 +45,10 @@ Update this file in the same commit as any change, and list anything done **by h
 - All 19 VMs started by themselves after the reset, both front doors 200 about 4 minutes after `c3` answered ssh, no load balancer failovers, no stuck VM (`docs/c3-reboot.md` Test 6; an earlier wording that called it a clean plain reboot was wrong, the shutdown had hung and the host was reset by hand).
 - **Why `systemctl reboot` hangs:** `ovn-controller` and the other network services stopped before `libvirt-guests` shut the guests down, so the prod workers (`w1` to `w3`) lost their network and sat for the full 300 s shutdown timeout. Added the drop-in `/etc/systemd/system/libvirt-guests.service.d/20-order-after-ovn.conf` on `c3` (by hand, untested). **Standing rule: restart `c3` with a force reboot** until a plain reboot has been seen to complete.
 
+### Why prod workers took 4.5 minutes to power off: fixed (kubelet graceful shutdown)
+- Cause: kubelet's `shutdownGracePeriod` was 0, so at power-off the network and the pods' NFS mounts went away while a `node` container was still running; it hung and systemd waited 3 x 90 s. Reproduced (271 s) and fixed: `shutdownGracePeriod: 30s`, `shutdownGracePeriodCriticalPods: 10s` on every node (by hand) and in the k8s cloud-init templates; the same worker now powers off in 33 s. Details and evidence: `docs/c3-reboot.md`.
+- The host route `10.0.1.0/24 via 192.168.2.174` on `c3` is persistent and documented (`docs/c3-host-route.md`; `up`/`down` lines in `/etc/network/interfaces`), present after every reboot test.
+
 ### Host reboot test 7: plain reboot with the ordering fix; the reboot is slow, not stuck
 - Plain `systemctl reboot` completed by itself: `c3` back 327 s after the command, all VMs auto-started, everything healthy (`docs/c3-reboot.md` Test 7). The shutdown waits about 4.5 min for the prod workers `w1` to `w3` (cause still open; `docs/pending.md`); the hand reset in test 6 came just before they finished. OVN now stops after the guests (drop-in works). Prod workers' journals made persistent (by hand) and added to `cloud-init/base.yaml.tftpl` for new VMs.
 
