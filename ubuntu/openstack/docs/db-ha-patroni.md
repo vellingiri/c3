@@ -15,7 +15,7 @@ background document). Now **Patroni** on `db1` and `db2` decides who is primary,
 | `db.rdulinux.com` | still a DNS alias for the *original* primary | **not used by the app any more and not updated on failover**; do not rely on it |
 
 Settings that matter: leader key TTL 30 s, loop 10 s, `maximum_lag_on_failover` 1 MB (a replica further behind is never promoted),
-`failsafe_mode` on, `use_pg_rewind` on (an old primary rejoins as a replica by itself), replication **asynchronous**.
+`failsafe_mode` on, `use_pg_rewind` on (an old primary rejoins as a replica by itself), replication **synchronous** (`synchronous_mode: true`, `synchronous_node_count: 1`, not strict; switched on 2026-10-20, see "Synchronous replication").
 
 Security: etcd has no TLS or login, so an nftables table `etcd_guard` on each of the three hosts allows ports 2379/2380 only from the three members
 and localhost, and Patroni's REST port 8008 only from 10.0.1.0/24 (writes need the `patroni` user/password from `config.yml`).
@@ -71,10 +71,21 @@ Change PostgreSQL settings with `patronictl edit-config` (cluster-wide, stored i
 | Replace the witness | create a new `witness` VM, `etcdctl member remove <old id>` / `member add`, start etcd with `ETCD_INITIAL_CLUSTER_STATE=existing` (scripts/db-ha-etcd.sh is for first install only and refuses to run over an existing cluster) |
 | Go back to plain PostgreSQL | `scripts/db-ha-patroni.sh rollback` (read it first; it stops Patroni, unmasks `postgresql@16-main`, restores the Debian config copies in `/root/db-ha-backup-20261020`) |
 
+## Synchronous replication (since 2026-10-20)
+`patronictl edit-config -s synchronous_mode=true -s synchronous_node_count=1` on the live pair, and the same keys in `cloud-init/files/db-ha-node.sh` for new clusters. `patronictl list` then shows the replica as **`Sync Standby`**
+(`select application_name, sync_state from pg_stat_replication` says `sync`); Patroni only promotes the sync standby, so a failover cannot lose an acknowledged commit. Not strict: if the standby is unavailable Patroni removes it from
+`synchronous_standby_names` and writes go on asynchronously, so a replica outage does not stop the application.
+Measured with `scripts/db-sync-loss-probe.py` (inserts numbered rows one commit at a time inside a backend pod and prints `ACK <id>` for each acknowledged commit; run `kubectl -n finance exec -i deploy/backend -- env PROBE_SECONDS=110 python - < scripts/db-sync-loss-probe.py > /tmp/probe.log`):
+| Drill | Result |
+|---|---|
+| Normal commit speed | about 36 commits per second per writer including the probe's 20 ms pause (about 7 ms per synchronous commit) |
+| **Primary VM powered off during writes** | `db2` Leader after 41 s; the highest acknowledged id (1470) and `max(id)` / `count(*)` on the new primary were identical (1470 / 1470): **no acknowledged write lost** |
+| **Sync standby powered off during writes** | commits paused for **34.5 s**, then resumed asynchronously (Patroni removed the standby from `synchronous_standby_names`); 3 client timeouts (15 s probe timeout); `synchronous_standby_names` empty while the standby is down, `Sync Standby` again after it returns |
+Notes: the app's `DB_COMMAND_TIMEOUT` is 30 s, so requests that commit during that 34.5 s window can fail with a timeout once. The probe needs `app.family_id` set to an existing family (the app's tables get a `family_id` column through a DDL trigger) and a **libpq connect timeout** for any psql used by hand against the two-host URL (`PGCONNECT_TIMEOUT=3`, otherwise a dead first host hangs the client for minutes).
+
 ## The limits you accepted
 
-- **Replication is asynchronous.** In a hard failure the last moments of writes (up to the 1 MB lag guard; in a partition up to ~20 s) can be lost.
-  Synchronous mode (`synchronous_mode: true`) would remove that at the price of writes stalling whenever the replica is unreachable; not chosen.
+- **Replication is synchronous but not strict** (see "Synchronous replication"): no acknowledged write is lost when the primary dies; the price is a write pause of about 35 s when the standby disappears, and during a standby outage the pair is asynchronous again until it is back.
 - **Two machines lost at once** (witness plus one DB) means no majority: no automatic failover, and the surviving DB demotes. Fix by bringing a VM back.
 - **Memory:** `ram_allocation_ratio` on `c3` was raised from 1.1 to 1.2 on 2026-10-20 (see `port-unbind-fix.md`, section on capacity), giving about 9 GB of headroom for rebuilds of `finance-lb` (~4 GB) and test VMs.
   from 1.1 to 1.2 is possible but not done (your decision).

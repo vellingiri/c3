@@ -186,7 +186,10 @@ bootstrap:
     maximum_lag_on_failover: 1048576
     primary_start_timeout: 60
     failsafe_mode: true
-    synchronous_mode: false
+    # synchronous replication, not strict: a commit waits for the standby (no acknowledged write is lost when the primary dies);
+    # if the standby is gone Patroni drops it after about 30 s and writes continue asynchronously (docs/db-ha-patroni.md)
+    synchronous_mode: true
+    synchronous_node_count: 1
     postgresql:
       use_pg_rewind: true
       use_slots: true

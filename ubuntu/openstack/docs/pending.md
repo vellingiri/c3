@@ -10,7 +10,7 @@ What is deliberately not done yet, who decides, and what finishes it. Update thi
 
 
 ## Accepted limits (no action planned)
-- Database replication is asynchronous: in a hard failure the last seconds (up to the 1 MB lag guard; about 20 s in a partition) can be lost. `synchronous_mode` would remove that at the price of writes stalling when the replica is unreachable (`db-ha-patroni.md`).
+- Database replication is synchronous but not strict: a standby outage means about 35 s of paused writes, then asynchronous until it returns (`db-ha-patroni.md`).
 - Losing two of the three etcd machines (`dbw` and one database) stops automatic database failover until one is back.
 - A really dead amphora is replaced automatically only after 15 minutes (`heartbeat_timeout = 900`, `amphora-reboot-fix.md`).
 - Single control-plane node per Kubernetes cluster (prod, qa, cka).
