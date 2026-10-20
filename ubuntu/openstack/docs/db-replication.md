@@ -69,26 +69,29 @@ The goal is one writable primary. **Never leave both writable** (split brain).
    Check: `ssh db2 "sudo -u postgres psql -Atc 'select pg_is_in_recovery()'"` -> `f`.
 4. **Point the app at it** (the password is never printed; the commands only swap the host inside `DATABASE_URL`):
    ```bash
-   K="kubectl --kubeconfig ~/.kube/prod -n finance"
-   NEW=$($K get secret db-secret -o jsonpath='{.data.DATABASE_URL}' | base64 -d | sed 's/10\.0\.1\.191/10.0.1.69/' | base64 | tr -d '\n')
-   $K patch secret db-secret -p "{\"data\":{\"DATABASE_URL\":\"$NEW\"}}"
-   $K rollout restart deploy/backend && $K rollout status deploy/backend
+   k() { kubectl --kubeconfig ~/.kube/prod -n finance "$@"; }      # a function, not K="kubectl ...": that breaks in zsh
+   NEW=$(k get secret db-secret -o jsonpath='{.data.DATABASE_URL}' | base64 -d | sed 's/10\.0\.1\.191/10.0.1.69/' | base64 | tr -d '\n')
+   k patch secret db-secret -p "{\"data\":{\"DATABASE_URL\":\"$NEW\"}}"
+   k rollout restart deploy/backend && k rollout status deploy/backend
    ```
    The backup CronJobs read the same secret and pick it up on their next run. The secret is not in git or managed by Argo.
-5. **DNS:** in `infra/infra.yaml` set `db: { ip: 192.168.2.135, ttl: 60 }`, then `terraform apply` in `infra` and push.
+5. **DNS:** in `infra/infra.yaml` set `db: { ip: 192.168.2.135, ttl: 60 }`, then `terraform apply` in `infra` and push. In an emergency you can
+   change it faster from c3: `openstack recordset set rdulinux.com. db.rdulinux.com. --record 192.168.2.135` (then make `infra.yaml` match, or the next
+   apply reverts it). Servers see the change within a minute. **macOS caches the old answer for longer**: if `ssh db` still lands on the old host,
+   `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder`.
 6. **Verify:** `curl http://finance.rdulinux.com/health` -> 200, log in and open a page that reads and writes, and run a backup job:
-   `$K create job --from=cronjob/db-backup-daily manual-after-failover && $K logs -f job/manual-after-failover`.
+   `k create job --from=cronjob/db-backup-daily manual-after-failover && k logs -f job/manual-after-failover` (same `k` function).
 7. **Get redundancy back** (when `db1` is repaired or replaced): rebuild it as a replica of the new primary. The roles have swapped, so
    `REBUILD=1 scripts/db-replica-setup.sh db2 db1`. Update the layout table above. To make `db1` the primary again later, do a planned switchover.
    If `db1` is gone for good: `terraform apply -replace='module.node["db1"].openstack_compute_instance_v2.this'` (see the README for a stale-port
    409), then the command above.
 
-## Planned switchover (maintenance, no data loss, about 2 minutes of failed writes)
-Use when you want the other VM to be primary (patching, resizing, moving). From `db1` to `db2`:
+## Planned switchover (maintenance, no data loss, about 25 seconds of failed writes)
+Use when you want the other VM to be primary (patching, resizing, moving). Rehearsed on prod both ways on 2026-10-20 (below). From `db1` to `db2`:
 1. `ssh db1 "sudo -u postgres psql -c \"alter system set default_transaction_read_only = on\" -c 'select pg_reload_conf()'"`
    The app now gets errors on writes only (reads still work). Do **not** scale the Deployments down: Argo's `selfHeal` would revert it.
 2. `scripts/db-replication-status.sh db1 db2` until `behind: 0 bytes`.
-3. Promote `db2` and repoint the secret/DNS exactly as steps 3 to 5 above.
+3. Promote `db2` and repoint the secret/DNS exactly as steps 3 to 5 above. Write the `k` function first (zsh-safe, see step 4).
 4. Rebuild `db1` as a replica of `db2`: `REBUILD=1 scripts/db-replica-setup.sh db2 db1` (this also clears the read-only setting, because the data
    directory is replaced).
 
@@ -104,9 +107,15 @@ Use when you want the other VM to be primary (patching, resizing, moving). From 
 | Writes on promoted `db2` | worked as `postgres` and as the app's user |
 | `db1` while `db2` was promoted | untouched, still the only database the app used |
 | Rebuild `db2` as a replica | `REBUILD=1` script, back to streaming, 0 bytes behind |
+| **Planned switchover db1 -> db2** (read-only, wait for 0 lag, promote, edit `db-secret`, restart backend) | **26 s** from read-only to a restarted backend; app `/health` 200 throughout; app writes failed only in that window |
+| App on `db2` as primary | pod connected to `10.0.1.69`, not in recovery, writes worked, 0 backend errors, a backup job dumped from it |
+| `db` alias moved to `db2` (CLI) | c3 and the runner saw `192.168.2.135` within a minute; the Mac needed a cache flush |
+| `db1` rebuilt as replica of `db2` | `REBUILD=1 scripts/db-replica-setup.sh db2 db1`; the read-only setting vanished with the old data directory |
+| **Switch back db2 -> db1** | 23 s window; secret and alias back to `10.0.1.191` / `192.168.2.124`; `db2` rebuilt as replica |
+| After both switchovers | 85 tables, 118,314 rows identical on both; backup job succeeded; 3/3 pods for every app; Argo Synced and Healthy |
 
-Not tested: a real loss of `db1` with the app restarted onto `db2`. The repoint commands (steps 4 and 5) are only reviewed, not run. Do the
-planned switchover once in a quiet hour to prove them before you need them.
+Not tested: a real, unplanned loss of `db1` (VM off or unreachable) with `db2` promoted without a read-only step. The promotion and repointing
+commands are the same ones proven above; what differs is that the last few transactions may be missing (step 2 of the failover shows how many).
 
 ## Troubleshooting
 - **Replica not streaming:** `ssh db2 'journalctl -u postgresql@16-main -n 50 --no-pager'`. Typical causes: wrong or rotated password
