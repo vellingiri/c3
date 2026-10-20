@@ -19,7 +19,7 @@ The old `haproxy` and `qa` aliases are gone: the VM and the name were retired (`
   `10.0.1.0/24 via 192.168.2.174` (192.168.2.174 is the external address of the OpenStack router `main_router`; its private side is `10.0.1.1`). It is set at runtime and in
   `/etc/network/interfaces` (`up`/`down` lines under `br0`; backup `/etc/network/interfaces.bak-20261020`). If the router's gateway address ever changes
   (`openstack router show main_router -c external_gateway_info`), update the route in both places. If private addresses stop answering from `c3`, check
-  `ip route | grep 10.0.1` first.
+  `ip route | grep 10.0.1` first. Full explanation and undo: `c3-host-route.md`.
 - Inside the cloud (pods, the load balancers, the VMs among themselves) the private addresses are used: the app's `DATABASE_URL` is `10.0.1.191`, the load balancer pools hold private IPs.
 - **Your Mac cannot reach the private network or the worker NodePorts (30080, 30443)**: it is on a different subnet (`192.168.1.x`). Test a worker from `c3`:
   `ssh c3 'curl -s -o /dev/null -w "%{http_code}\n" http://10.0.1.67:30080/health'` (`w1`; 200 when healthy; the floating IP `192.168.2.52` works too). The load balancer's own

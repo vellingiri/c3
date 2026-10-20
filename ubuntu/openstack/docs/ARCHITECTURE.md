@@ -75,7 +75,7 @@ nginx pods (3, one per node)  ->  /api -> backend (3)   /docs -> docs (3)   / ->
 
 ### What Terraform does **not** manage (change these by hand, and note it in `CHANGELOG.md`)
 - **Octavia:** the flavor `ha`, `finance-lb`, `argo-lb`, their listeners, pools, members (**static**: edit them when a worker is added or retired) and floating IPs (`octavia-finance-lb.md`).
-- **Host networking on `c3`:** a static route `10.0.1.0/24 via 192.168.2.174` (the router's external address) in `/etc/network/interfaces` so the host can reach private VM addresses.
+- **Host networking on `c3`:** a static route `10.0.1.0/24 via 192.168.2.174` (the router's external address) in `/etc/network/interfaces` so the host can reach private VM addresses (`c3-host-route.md`).
 - **Cloud tuning on `c3`:** Placement allocation ratios (disk 1.5, memory 1.1), project core quota 64, and `/etc/octavia/octavia.conf` (restart BOTH `octavia-worker` and `octavia-health-manager` after any change).
 - **Kubernetes secrets** (`app-secret`, `db-secret`, `ghcr-secret`, Argo CD's repo credential and `argocd-secret`): not in git, not in Terraform. They are copied between clusters with `scripts/k8s-copy-between.sh` without touching disk.
 - **PostgreSQL itself:** roles (`financeapp`, `replicator`, `monitor`), `pg_hba.conf`, `conf.d/20-replication.conf`, replication slot `slot_db2`; built by `scripts/db-replica-setup.sh`, not by cloud-init.
