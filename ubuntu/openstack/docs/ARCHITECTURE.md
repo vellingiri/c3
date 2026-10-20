@@ -40,7 +40,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 ### Kubernetes
 | Cluster | Zone | Nodes (floating / private IP) |
 |---|---|---|
-| **prod** | `prod.rdulinux.com` | `c1` .103 / 10.0.1.254 (control plane), `w1` .52 / .67, `w2` .193 / .197, `w3` .139 / .45 (`w4` and `w5` were retired 2026-10-20; the cluster is now c1 + 3 workers) |
+| **prod** | `prod.rdulinux.com` | `c1` .103 / 10.0.1.254, `c2` .72 / .25, `c3` .78 / .251 (three control-plane nodes behind the API load balancer `prod-api`, `api.prod.rdulinux.com`, `docs/k8s-ha-control-plane.md`), `w1` .52 / .67, `w2` .193 / .197, `w3` .139 / .45 (`w4` and `w5` were retired 2026-10-20; the cluster is now c1 + 3 workers) |
 | **qa** | `qa.rdulinux.com` | `c1` .120 / 10.0.1.66, `w1` .59 / .118, `w2` .98 / .10, `w3` .136 / .96 (the spare `learn` VM was removed 2026-10-20) |
 Kubernetes 1.30, Calico, pod CIDR `192.168.0.0/16`. Names have no environment prefix: `ssh c1.prod`, `ssh w2.qa`. Server names repeat across environments by design.
 (Floating IPs here are the last octet of `192.168.2.x`.)
