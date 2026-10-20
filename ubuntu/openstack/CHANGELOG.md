@@ -41,6 +41,10 @@ Update this file in the same commit as any change, and list anything done **by h
 - `c3` back in 31 s after `systemctl reboot --force --force`; everything recovered (front doors 200, 12/12 pods, Patroni 1 Leader + 1 Replica, etcd 3/3, same amphorae). Found: VMs started right after boot can stick in `powering-on` (new `scripts/c3-restart-stuck-vms.py`; wait a minute after `nova-compute` is up); `openstack server reboot --hard` fails because Cinder is disabled (use stop/start); the `runner` guest hit a kernel oops once (cause unknown, did not recur).
 - Capacity/Cinder note: Cinder has been disabled since August 2026; nothing here uses volumes.
 
+### Cinder removed from the catalog
+- Cinder (block storage) had been disabled since 2026-08-17 and nothing used volumes (0 volumes, snapshots, backups, 0 volume attachments in Nova). Its catalog service `cinderv3` and its 3 endpoints were deleted; the packages and the `cinder` database stay installed but unused. **Backups** (before deleting): `/root/backups/cinder-removal-20261020/` on `c3` (database dump, `/etc/cinder`, service and endpoint JSON, `RESTORE.txt`, checksums) and a copy on the `backup` host at `/root/backups/c3-cinder-removal-20261020.tgz`. Effect: `openstack server reboot --hard` works again (tested on a CKA worker).
+- New `docs/pending.md`: the list of open items and accepted limits.
+
 ### `db-witness` renamed `dbw`
 - Short name like the other VMs (`db1`, `c1`, `w1`). In `nodes.yaml` the key changed, so Terraform replaces the VM (new VM, same address 10.0.1.120): run `terraform apply` in `environments/prod`; if the first apply stops with an IP-in-use error on the new port (old and new are created at the same time), run it a second time. The new VM joins etcd by itself and replaces the old member (same address). The monitor on the runner (`WITNESS` default) and `~/.ssh/config` (`Host dbw`) were updated. Older entries of this file still say `db-witness`.
 

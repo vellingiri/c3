@@ -20,6 +20,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | understand why load balancers broke after a host reboot and how it was fixed (patched amphora image, health-manager setting, OVN watcher) | [amphora-reboot-fix.md](amphora-reboot-fix.md) |
 | build, use or throw away the CKA practice cluster (1 control plane + 3 workers) | [cka-cluster.md](cka-cluster.md) |
 | understand or undo the route that lets `c3` reach private VM addresses | [c3-host-route.md](c3-host-route.md) |
+| see what is still open, waiting for a decision, or an accepted limit | [pending.md](pending.md) |
 | a VM replace failed with "Port ... is still in use" (Neutron policy fix on `c3`) | [port-unbind-fix.md](port-unbind-fix.md) |
 | why automatic database failover was designed this way | [db-auto-failover-plan.md](db-auto-failover-plan.md) (implemented) |
 
@@ -30,6 +31,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | operations-cheatsheet.md | reference | current |
 | k8s-operations.md | runbook | current; node add/retire procedures follow the 2026-10-20 `w4`/`w5`/`w1` changes (rehearsed live) |
 | octavia-finance-lb.md | build record + runbook | current; load balancers created by hand |
+| pending.md | status page | keep current; last updated 2026-10-20 |
 | cka-cluster.md | runbook | built and verified 2026-10-20 |
 | port-unbind-fix.md | incident + fix | fixed and proven 2026-10-20 |
 | db-ha-patroni.md | runbook + proof | current; five failure drills passed on live prod 2026-10-20 |
