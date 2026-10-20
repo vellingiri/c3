@@ -105,4 +105,4 @@ after `db2` and `argo-lb`. A new `m1.small` is 4 GB, an `m1.tiny` 2 GB, an ampho
 - Database failover is manual (`db-replication.md`); automatic failover is only a proposal (`db-auto-failover-plan.md`).
 - The monitor runs on the runner: if the runner is down, nobody is alerted.
 - Both load balancers are ACTIVE_STANDBY (two amphorae each; `argo-lb` since 2026-10-20); a dead amphora is replaced automatically after 5 minutes (`heartbeat_timeout = 300`), or at once with `openstack loadbalancer failover <lb>`.
-- Rebuilding two amphorae at once (`openstack loadbalancer failover finance-lb`) fails about half the time and needs a retry (`amphora-reboot-fix.md`).
+- Rebuilding two amphorae at once (`openstack loadbalancer failover finance-lb`) is reliable since the RAM allocation ratio was raised (it was a capacity problem; drilled twice with no failed request, `amphora-reboot-fix.md`). Keep an eye on the host's real memory: 67 of 80 GB used on 2026-10-20 (`free -m`).

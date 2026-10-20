@@ -6,7 +6,6 @@ What is deliberately not done yet, who decides, and what finishes it. Update thi
 ## Waiting for a decision or a moment
 | Item | Why it is open | What finishes it |
 |---|---|---|
-| Two-amphora failover of `finance-lb` | `openstack loadbalancer failover finance-lb` fails about half the time with a Placement "no allocation candidates" error; a retry works. Cause not found | retry; open a deeper investigation only if it blocks a rebuild |
 
 
 ## Accepted limits (no action planned)
