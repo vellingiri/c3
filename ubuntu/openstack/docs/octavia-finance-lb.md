@@ -1,5 +1,7 @@
 # Octavia load balancers for prod: `finance-lb` (finance app) and `argo-lb` (Argo CD)
 
+> Current as of 2026-10-20. Overall picture: `ARCHITECTURE.md`. Adding or retiring workers: `k8s-operations.md`. Both load balancers are created by hand (not Terraform).
+
 Goal: put the prod finance app behind an Octavia load balancer that health-checks the workers and survives the loss
 of one of its own nodes, instead of the single `haproxy` VM that used to own `192.168.2.5`. Built 2026-10-20 with the OpenStack CLI
 on `c3` (not Terraform-managed). The old haproxy VM was destroyed afterwards (see "Old haproxy VM" below).
@@ -27,7 +29,7 @@ openstack loadbalancer flavor create --name ha --flavorprofile active-standby --
 openstack loadbalancer create --name finance-lb --vip-subnet-id private_subnet --flavor ha
 openstack loadbalancer listener create --name finance-http --protocol HTTP --protocol-port 80 --insert-headers X-Forwarded-For=true finance-lb
 openstack loadbalancer pool create --name finance-pool --lb-algorithm ROUND_ROBIN --listener finance-http --protocol HTTP
-openstack loadbalancer member create --name w1 --subnet-id private_subnet --address 10.0.1.237 --protocol-port 30080 finance-pool   # w2, w3 likewise
+openstack loadbalancer member create --name wN --subnet-id private_subnet --address <worker private IP> --protocol-port 30080 finance-pool   # once per worker (today w2 to w5)
 openstack loadbalancer healthmonitor create --name finance-hm --type HTTP --url-path /health --expected-codes 200 --delay 5 --timeout 3 --max-retries 3 finance-pool
 FIP=$(openstack floating ip create external_network -c floating_ip_address -f value)
 openstack floating ip set --port $(openstack loadbalancer show finance-lb -c vip_port_id -f value) $FIP

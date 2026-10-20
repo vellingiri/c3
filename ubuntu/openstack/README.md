@@ -1,5 +1,8 @@
 # OpenStack – Terraform
 
+**Documentation:** start at [docs/README.md](docs/README.md) (index) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (what runs where).
+Release notes: [CHANGELOG.md](CHANGELOG.md). This page covers how the Terraform is used.
+
 ```
 infra/                   shared cloud: networks, router, keypair, security group,
                          images, DNS zones + static records   (infra.yaml)
@@ -11,8 +14,8 @@ scripts/adopt-node.sh    bring an existing VM under Terraform without recreating
 scripts/k8s-copy-between.sh  copy k8s objects between clusters through two local kubeconfigs (secrets stay in the pipe)
 scripts/db-replica-setup.sh  make db2 a streaming replica of db1 (re-runnable);  scripts/db-replication-status.sh checks it
 scripts/install-db-monitor.sh  install the replication monitor + ntfy alerts on the runner (scripts/db-replication-monitor.sh)
-docs/                    runbooks: db-replication (db1/db2 failover), db-auto-failover-plan (proposal), octavia-finance-lb (finance-lb, argo-lb),
-                         finance-db-restore (backups), prod-k8s-rebuild, etcd-restore-rehearsal
+docs/                    architecture, runbooks and design records (index: docs/README.md)
+CHANGELOG.md             release notes for the infrastructure
 ```
 
 Apply order: `infra` first, then `environments/<env>`. Environments read infra's
@@ -23,6 +26,19 @@ outputs through its remote state (`openstack/infra/terraform.tfstate`).
 - Change network, DNS records, security rules, images: edit `infra/infra.yaml`.
 - Every entry is keyed by a stable name (`for_each`), so adding or removing one
   never shifts or recreates the others.
+
+## Roles and scripts
+Roles (`role:` in `nodes.yaml`, one cloud-init composition each in `modules/node/main.tf`): `controller`, `worker`, `database`, `runner`, `gitlab`, `learn`.
+| Script | Use |
+|---|---|
+| `adopt-node.sh` | bring an existing VM under Terraform without recreating it |
+| `clear-stale-port.sh` | fix `409 Port ... is still in use` after replacing a VM |
+| `k8s-copy-between.sh` (`k8s-copy.sh` is the older single-cluster form) | copy Kubernetes objects between clusters without writing secrets to disk |
+| `install-etcd-snapshot.sh` | add the etcd snapshot timer to an existing controller |
+| `install-ingress-nginx.sh` | install ingress-nginx (NodePort 30080) on a cluster |
+| `db-replica-setup.sh`, `db-replication-status.sh` | build and check the PostgreSQL replica (`docs/db-replication.md`) |
+| `install-db-monitor.sh`, `db-replication-monitor.sh` | replication alerts on the runner |
+| `openstack-shortcuts.sh` | `openstack server list` with an `Env` column (source it in your shell) |
 
 ## Rules the design enforces
 - `user_data`, `image_name`, `network` and the port's `fixed_ip` are in `ignore_changes`.
@@ -52,7 +68,7 @@ NO_DNS=1 ...                                  # when infra owns that VM's DNS re
 S3 (MinIO) bucket `terraform-state`: `openstack/infra/...`, `openstack/<env>/nodes/...`.
 Needs `OS_*` credentials and the MinIO access keys in the environment.
 
-Retired stacks are kept for reference in `../archive/` and must never be applied.
+Retired stacks are kept for reference in `../archive/` and must never be applied (why and how: `docs/terraform-v2-migration.md`).
 
 ## Troubleshooting
 

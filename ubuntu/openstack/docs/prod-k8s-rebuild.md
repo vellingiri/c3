@@ -1,7 +1,24 @@
 # Rebuild the prod k8s cluster (park workloads on QA)
 
-> Historical: written when `haproxy` was the front door. It was replaced by the Octavia load balancer and the VM was
-> destroyed (see `octavia-finance-lb.md`). For a future rebuild, edit the load balancer pool members instead of haproxy.cfg.
+> **Read this first.** The phases below were written, and executed on 2026-10-19, when the `haproxy` VM was the front door. That VM is gone:
+> traffic now enters through the Octavia load balancers `finance-lb` (192.168.2.5) and `argo-lb` (192.168.2.113), and prod has workers `w2` to `w5`
+> (not `w1..w3`). The data, secrets and Argo CD steps are unchanged. Wherever a phase says "edit haproxy.cfg", use the adaptation below.
+> The adaptation is derived from the Octavia setup and **has not been rehearsed**; try it on a quiet day and correct this page.
+
+### Adapting Phase 2 and Phase 4 to Octavia (swap pool members instead of haproxy.cfg)
+Pools are static lists of `private IP : NodePort` (`octavia-finance-lb.md`). "Cutting over to QA" means making the QA workers the only members; "moving back" is the reverse.
+1. On QA, free NodePort 30080 (remove ingress-nginx, `scripts/install-ingress-nginx.sh` restores it later) and patch `argocd-server` to NodePort 30443.
+2. Add the QA workers to **both** pools and wait until they are `ONLINE`:
+   ```bash
+   # QA worker private IPs on 2026-10-20: w1 10.0.1.118, w2 10.0.1.10, w3 10.0.1.96   (check: openstack server list --tags qa)
+   openstack loadbalancer member create --name qa-w1 --subnet-id private_subnet --address 10.0.1.118 --protocol-port 30080 finance-pool
+   openstack loadbalancer member create --name qa-w1 --subnet-id private_subnet --address 10.0.1.118 --protocol-port 30443 argo-backend
+   # ... repeat for the other QA workers; wait for ONLINE after each (openstack loadbalancer member list finance-pool)
+   ```
+3. Remove the prod workers from both pools (`openstack loadbalancer member delete finance-pool w2`, ...). Traffic now runs on QA. Compare public paths first, as in the 2026-10-19 log below.
+4. Rebuild prod (Phase 3). The nodes the new prod cluster gets keep their ports and private IPs, so the old pool member addresses stay valid.
+5. Move back: re-add the prod workers (`w2` to `w5`), wait `ONLINE`, remove the QA members. Cron jobs and the Argo Application move as in Phases 1 and 4.
+Other changes since the log below: the finance app is at `http://finance.rdulinux.com` (no `qa.rdulinux.com`); db access is by IP `10.0.1.191` (`db1`); the kubeconfig and the CI runner's kubeconfig must be replaced after the CA changes (`k8s-operations.md`).
 
 Goal: recreate `c1`, `w1..3` from the current cloud-init (proper hostnames /
 node names) with almost no downtime, by running the workloads on the QA cluster meanwhile.
