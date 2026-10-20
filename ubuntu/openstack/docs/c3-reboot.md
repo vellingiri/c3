@@ -55,6 +55,47 @@ Limits to know:
   What it means: a name with fewer than 2 dots is tried with the search suffixes first; names with 2 or more dots (`repo.rdulinux.com`) are tried as typed. Side effect: a one-dot external name such as `github.com` first tries the three suffixes (a few milliseconds, then resolves normally).
   Backup `resolv.conf.bak-20261020`. `/etc/resolv.conf` is a plain file here (no resolvconf, no systemd-resolved), so the edit persists.
 
+## Second reboot test: autostart worked, the load balancers did not come back (2026-10-20)
+A plain `reboot` of `c3` with all 17 VMs running (no manual shutdown), after the autostart settings above. Results:
+| Check | Result |
+|---|---|
+| Clean guest shutdown at host shutdown | worked, but it takes time: `c3` was back after **570 s** this time (150 s the first time, when the VMs were already off) |
+| VMs started by themselves | **yes: 17 of 17 running about 2 minutes after boot** |
+| Route, `nmbd`, failed units, `nslookup w1.prod` on `c3` | route present; `nmbd` active; 0 failed units; short names resolve |
+| Octavia mass rebuild | **prevented** by `failover_threshold = 2`: the log shows "Stale amphora count reached the threshold (2). 3 amphorae were set into FAILOVER_STOPPED" and no failover ran |
+| Databases, prod and QA clusters, Argo, runner, monitor | all healthy within minutes, no action needed |
+| **Both front doors (finance, Argo)** | **down, and they did not recover by themselves** (see below). Repaired by hand |
+
+### Root cause: the amphora image loses its VIP network after a clean stop and start
+- After the host boot every amphora VM was running and its agent answered, but the agent reported `"networks": {}`: the VIP NIC (`eth1`) was not in the amphora's network namespace, so nothing could answer on the VIP.
+- **Reproduced on one amphora without rebooting the host:** a *hard* reboot of the Argo amphora kept its VIP; a *clean* `openstack server stop` then `start` lost it (`networks=[]`, VIP down). Its saved data on disk (`/var/lib/octavia/plugged_interfaces`, `/etc/octavia/interfaces/eth1.json`) was intact.
+- **Why:** at every boot, `amphora-netns.service` (written by the agent from the template `amphora-netns.systemd.j2` in the image) moves the VIP NIC into the namespace. It finds the NIC by running `ip link | awk '{getline n; print $0,n}' ...`, which **pairs each line of `ip link` with the next**. That only works if every interface prints exactly two lines. When the kernel gives a NIC an `altname` line (it does for the slot-named NICs a cold start produces, `ens3`/`ens4`), the pairing slips and the VIP NIC's MAC is turned into garbage, so it is never matched or moved. A hard reboot keeps the old hot-plug naming (`ens7`), which is why it worked.
+  Checked on `c3`'s own interfaces: the old command returns garbage for almost every interface; `ip -o link` (one line per interface) returns exactly the right MAC and name for all of them.
+- This is a bug in the amphora image (Octavia 16.1.1 in the `Amphora` image built 2026-10-02), not in our settings and not in Nova. Any clean shutdown of an amphora, including the clean guest shutdown now done at host shutdown, triggers it.
+
+### Permanent fix: patched amphora image (in progress)
+1. Done: copied the image (`/root/amphora-fix/`, hash matched Glance), changed that one command in `/opt/amphora-agent-venv/.../templates/amphora-netns.systemd.j2` from `/sbin/ip link | awk '{getline n; print $0,n}' |` to `/sbin/ip -o link |`, verified the image (`qemu-img check`), uploaded it as `Amphora-netns-fix-20261020` (id `c537e966-d3f9-498f-a33c-42d246e3ef88`) with the tag `Amphora` that Octavia selects by.
+2. **Blocked on one decision:** the new image is owned by the admin project, but the original was owned by Octavia's project (`9197db57…`) and is private, so Octavia may not be able to see the new one. Until its ownership (or visibility) is fixed, Octavia keeps using the **original** image, which I re-tagged `Amphora` as a fallback.
+3. To do after that: rebuild the amphorae from the new image one load balancer at a time (`openstack loadbalancer failover argo-lb`, then `finance-lb`), then **prove it**: a clean `openstack server stop` and `start` of each amphora must come back with its VIP (`networks` not empty, VIP answering), and finally a real host reboot.
+4. Then remove the old image's tag (keep the image as a backup) so only the fixed one can be selected.
+Check on any amphora: `curl --cert /etc/octavia/certs/private/client.cert-and-key.pem --cacert /etc/octavia/certs/server_ca-chain.cert.pem -k https://<amphora lb_network_ip>:9443/1.0/details` and look at `networks`.
+Until step 3 is done, **a host reboot leaves both front doors down until the repair below is run.**
+
+### Repair after a reboot (manual, until the image is replaced)
+1. Wait for all VMs to be up (about 2 minutes) and the amphorae `ALLOCATED`/`FAILOVER_STOPPED`.
+2. `openstack loadbalancer failover argo-lb`, wait for `ACTIVE`/`ONLINE` (about 40 s), then `openstack loadbalancer failover finance-lb` (about 1 minute). A `409 immutable` means Octavia is busy: retry every 15 s. If one amphora stays in `ERROR` afterwards, `openstack loadbalancer amphora failover <id>` rebuilds just that one.
+3. Check Argo: **a rebuilt standalone amphora can leave the OVN router pointing at the wrong MAC for its VIP** (`argo.rdulinux.com` answers nothing although the load balancer is `ACTIVE`/`ONLINE`). The router resolves the VIP to the *unbound VIP port's* MAC unless the amphora announces itself with a gratuitous ARP, which a standalone amphora does only once, at plug time. Fix: find the row and point it at the amphora's VRRP port MAC:
+   ```bash
+   ovn-sbctl --columns=_uuid,mac find MAC_Binding ip=10.0.1.56                  # the Argo VIP
+   openstack port list -c Name -c "MAC Address" -c "Fixed IP Addresses" -f value | grep vrrp   # MAC of the NEW amphora's vrrp port
+   ovn-sbctl set MAC_Binding <uuid> mac='"fa:16:3e:xx:xx:xx"'                    # the quotes inside the quotes matter
+   ```
+   `finance-lb` (active/standby) does not need this: keepalived announces the VIP on every takeover. Making `argo-lb` active/standby would remove the problem for good, at the cost of one more 2 GB amphora (memory is tight, see `ARCHITECTURE.md`).
+4. Run the verification sweep from the "Verify" section.
+
+### How this was diagnosed (reusable)
+Read an amphora's disk without stopping it: `LIBGUESTFS_BACKEND=direct virt-cat --format=qcow2 -a /var/lib/nova/instances/<server id>/disk <path>` (the `--format` avoids a lock error), and `guestmount -a <image> -i --ro <dir>` on a copy of the image. The amphora console log (`openstack console log show <server id>`) shows the NIC renames and whether `amphora-netns` ran.
+
 ## Procedure (manual: the fallback, and the checks that still apply)
 With automatic start configured (above) the manual shutdown and start steps can be skipped, but not the checks before and after. Allow about an hour including checks (the test took longer, because of the Octavia repairs below). The finance app is down from the first shutdown until the pods and a load balancer are back, and Argo CD may be down longer (see "What went wrong").
 

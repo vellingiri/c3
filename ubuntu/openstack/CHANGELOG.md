@@ -19,6 +19,9 @@ Update this file in the same commit as any change, and list anything done **by h
 | the *original* prod worker `w1` (10.0.1.118) and the test VMs `web1`, `web2` | deleted; prod `w1` was re-created as a new VM |
 | ssh alias `qa` | removed; `ssh w1.prod` and `ssh w1.qa` both work |
 
+### Host `c3`: second reboot test, and the real cause of the load balancers not surviving a reboot
+- Autostart works (17 of 17 VMs running about 2 minutes after boot) and `failover_threshold` prevented the rebuild storm, **but both front doors stayed down**: the amphora image (Octavia 16.1.1) loses its VIP network after a clean stop and start, because its boot script pairs lines of `ip link` and breaks when `altname` lines appear. Reproduced on one amphora; a patched image is built but **not yet in use** (waiting for an image-ownership decision). Until then repair by hand after a reboot: `docs/c3-reboot.md`.
+
 ### Host `c3`: VMs restart by themselves after a boot, plus two small fixes
 - **Autostart configured** (`docs/c3-reboot.md`): `resume_guests_state_on_host_boot = true` (Nova), clean parallel guest shutdown and no libvirt autostart (`/etc/default/libvirt-guests`), a systemd drop-in so `nova-compute` stops before the guests are shut down, and Octavia `failover_threshold = 2` so a reboot does not trigger a mass rebuild of amphorae. Proven on the spare VM `learn` (restarted in 24 s; a VM stopped on purpose stays off); **not yet proven through a real reboot with everything running**.
 - **`nmbd` fixed:** Samba listened on `enp3s0`, which has no IP (it is a port of the bridge `br0`); now `br0`. **Name lookups on `c3` fixed:** `options ndots:2` so `nslookup w1.prod` works. Backups of every changed file: `*.bak-20261020`.
