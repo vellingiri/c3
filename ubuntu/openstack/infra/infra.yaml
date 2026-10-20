@@ -58,6 +58,7 @@ dns:
     repo:    { ip: 192.168.2.3, ptr: true }
     backup:  { ip: 192.168.2.4, ptr: true }
     lb:      { ip: 192.168.2.5, ptr: true }   # the Octavia load balancer (was the haproxy VM)
+    finance: { ip: 192.168.2.5 }   # the finance app (finance-lb); replaces qa.rdulinux.com
     argo:    { ip: 192.168.2.113, ptr: true }   # argo-lb, its own Octavia load balancer (finance-lb keeps 192.168.2.5)
     "@":     { ip: 13.140.58.46 }
     www:     { ip: 13.140.58.46 }
