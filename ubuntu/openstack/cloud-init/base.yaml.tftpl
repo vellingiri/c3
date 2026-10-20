@@ -16,6 +16,8 @@ runcmd:
   # node (a renamed k8s node can no longer register with the API server).
   - "echo 'preserve_hostname: true' > /etc/cloud/cloud.cfg.d/99-keep-hostname.cfg"
   - touch /root/.hushlogin /home/ubuntu/.hushlogin
+  # keep the journal across reboots, so a slow or stuck shutdown can be read afterwards (docs/c3-reboot.md)
+  - mkdir -p /var/log/journal && systemd-tmpfiles --create --prefix /var/log/journal && systemctl restart systemd-journald
   - chown ubuntu:ubuntu /home/ubuntu/.hushlogin
   - unlink /etc/resolv.conf || true
   - cp /etc/resolv.conf.static /etc/resolv.conf
