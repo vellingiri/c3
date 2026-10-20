@@ -37,6 +37,10 @@ Update this file in the same commit as any change, and list anything done **by h
 ### CKA practice cluster (built and verified)
 - New `environments/cka` (1 controller + 3 workers, m1.small, `cka.rdulinux.com`) and the zone `cka.rdulinux.com.` in `infra/infra.yaml`. Build, use and teardown: `docs/cka-cluster.md`. Apply `infra` first (DNS zone), then `environments/cka`.
 
+### Host reboot test 5: all VMs stopped, force reboot, manual start (`docs/c3-reboot.md`)
+- `c3` back in 31 s after `systemctl reboot --force --force`; everything recovered (front doors 200, 12/12 pods, Patroni 1 Leader + 1 Replica, etcd 3/3, same amphorae). Found: VMs started right after boot can stick in `powering-on` (new `scripts/c3-restart-stuck-vms.py`; wait a minute after `nova-compute` is up); `openstack server reboot --hard` fails because Cinder is disabled (use stop/start); the `runner` guest hit a kernel oops once (cause unknown, did not recur).
+- Capacity/Cinder note: Cinder has been disabled since August 2026; nothing here uses volumes.
+
 ### `db-witness` renamed `dbw`
 - Short name like the other VMs (`db1`, `c1`, `w1`). In `nodes.yaml` the key changed, so Terraform replaces the VM (new VM, same address 10.0.1.120): run `terraform apply` in `environments/prod`; if the first apply stops with an IP-in-use error on the new port (old and new are created at the same time), run it a second time. The new VM joins etcd by itself and replaces the old member (same address). The monitor on the runner (`WITNESS` default) and `~/.ssh/config` (`Host dbw`) were updated. Older entries of this file still say `db-witness`.
 
