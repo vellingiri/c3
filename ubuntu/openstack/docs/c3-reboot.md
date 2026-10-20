@@ -46,7 +46,7 @@ Undo: restore the `.bak-20261020` files, delete the drop-in, `systemctl daemon-r
 
 Limits to know:
 - All VMs start at once, with no database-first ordering. The apps and Postgres replication retry and caught up in the first test, but check after a reboot.
-- A really dead amphora is replaced automatically only after **15 minutes** (`heartbeat_timeout`), and if **two** die at the same time Octavia will not repair them by itself: look at `openstack loadbalancer amphora list` and run `openstack loadbalancer failover <lb>` by hand (retry on a 409; see `amphora-reboot-fix.md` for the flaky two-amphora rebuild).
+- A really dead amphora is replaced automatically only after **5 minutes** (`heartbeat_timeout = 300`; it was 900 before 2026-10-20, `amphora-reboot-fix.md`), and if **two** die at the same time Octavia will not repair them by itself: look at `openstack loadbalancer amphora list` and run `openstack loadbalancer failover <lb>` by hand (retry on a 409; see `amphora-reboot-fix.md` for the flaky two-amphora rebuild).
 
 ## Other fixes made on `c3` the same day
 - **`nmbd` failed on every boot.** `/etc/samba/smb.conf` had `interfaces = 127.0.0.0/8 enp3s0`, but `enp3s0` has no IP address (it is a port inside the bridge `br0`, which carries `192.168.2.2`), so nmbd logged "No local IPv4 non-loopback interfaces available, waiting for interface", never reported ready, and systemd timed it out.

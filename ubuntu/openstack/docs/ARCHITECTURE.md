@@ -78,7 +78,7 @@ nginx pods (3, one per node)  ->  /api -> backend (3)   /docs -> docs (3)   / ->
 - **Octavia:** the flavor `ha`, `finance-lb`, `argo-lb`, their listeners, pools, members (**static**: edit them when a worker is added or retired) and floating IPs (`octavia-finance-lb.md`).
 - **Host networking on `c3`:** a static route `10.0.1.0/24 via 192.168.2.174` (the router's external address) in `/etc/network/interfaces` so the host can reach private VM addresses (`c3-host-route.md`).
 - **VM autostart and other host settings on `c3`:** `resume_guests_state_on_host_boot` in `nova.conf`, `/etc/default/libvirt-guests`, a systemd ordering drop-in for `nova-compute`, `failover_threshold` in `octavia.conf`, `interfaces = ... br0` in `smb.conf`, and `options ndots:2` in `/etc/resolv.conf` (`c3-reboot.md`).
-- **Octavia hardening against host reboots:** the patched Glance image `Amphora-netns-fix-v2-20261020` (the only one tagged `Amphora`), `heartbeat_timeout = 900` and `failover_threshold = 2` in `octavia.conf`, and the `ovn-vip-binding.timer` watcher (`amphora-reboot-fix.md`).
+- **Octavia hardening against host reboots:** the patched Glance image `Amphora-netns-fix-v2-20261020` (the only one tagged `Amphora`), `heartbeat_timeout = 300` and `failover_threshold = 2` in `octavia.conf`, and the `ovn-vip-binding.timer` watcher (`amphora-reboot-fix.md`).
 - **Cloud tuning on `c3`:** Placement allocation ratios (disk 1.5, memory 1.1), project core quota 64, and `/etc/octavia/octavia.conf` (restart BOTH `octavia-worker` and `octavia-health-manager` after any change).
 - **Kubernetes secrets** (`app-secret`, `db-secret`, `ghcr-secret`, Argo CD's repo credential and `argocd-secret`): not in git, not in Terraform. They are copied between clusters with `scripts/k8s-copy-between.sh` without touching disk.
 - **PostgreSQL itself:** roles (`financeapp`, `replicator`, `monitor`), `pg_hba.conf`, `conf.d/20-replication.conf`, replication slot `slot_db2`; built by `scripts/db-replica-setup.sh`, not by cloud-init.
@@ -104,5 +104,5 @@ after `db2` and `argo-lb`. A new `m1.small` is 4 GB, an `m1.tiny` 2 GB, an ampho
 - NFS on `repo` (uploads, logs, backups) has no replica.
 - Database failover is manual (`db-replication.md`); automatic failover is only a proposal (`db-auto-failover-plan.md`).
 - The monitor runs on the runner: if the runner is down, nobody is alerted.
-- `argo-lb` has a single amphora (by choice: it is an admin UI); a dead amphora is replaced automatically only after 15 minutes (`heartbeat_timeout`).
+- Both load balancers are ACTIVE_STANDBY (two amphorae each; `argo-lb` since 2026-10-20); a dead amphora is replaced automatically after 5 minutes (`heartbeat_timeout = 300`), or at once with `openstack loadbalancer failover <lb>`.
 - Rebuilding two amphorae at once (`openstack loadbalancer failover finance-lb`) fails about half the time and needs a retry (`amphora-reboot-fix.md`).

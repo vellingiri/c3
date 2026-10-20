@@ -14,7 +14,7 @@ on `c3` (not Terraform-managed). The old haproxy VM was destroyed afterwards (se
 | Listener | `finance-http` HTTP :80, inserts `X-Forwarded-For` |
 | Pool `finance-pool` | workers `w1 10.0.1.67`, `w2 10.0.1.197`, `w3 10.0.1.45`:  **30080** (nginx NodePort), HTTP monitor `GET /health` = 200 |
 | L7 policies | none; every request goes to `finance-pool` |
-| **`argo-lb`** | separate load balancer (SINGLE topology: one amphora), VIP `10.0.1.56` / floating IP **`192.168.2.113`** (`argo.rdulinux.com`). Listener `argo-http` HTTP :80 -> pool `argo-backend`: workers w1-w5 : **30443** (Argo CD), HTTP monitor `GET /healthz` = 200 |
+| **`argo-lb`** | separate load balancer, flavor `ha` (**ACTIVE_STANDBY**: two amphorae, rebuilt that way on 2026-10-20 with `scripts/octavia-argo-lb-ha.sh`; it was SINGLE before), VIP `10.0.1.76` / floating IP **`192.168.2.113`** (`argo.rdulinux.com`). Listener `argo-http` HTTP :80 -> pool `argo-backend`: workers w1 to w3 : **30443** (Argo CD), HTTP monitor `GET /healthz` = 200 |
 
 ## Verified
 - Same status + content hash as the live haproxy on 8 public paths; Argo host answers 200.
@@ -35,12 +35,16 @@ FIP=$(openstack floating ip create external_network -c floating_ip_address -f va
 openstack floating ip set --port $(openstack loadbalancer show finance-lb -c vip_port_id -f value) $FIP
 ```
 
-### `argo-lb` (Argo CD, its own load balancer)
+### `argo-lb` became ACTIVE_STANDBY (2026-10-20)
+A new load balancer `argo-lb-ha` (flavor `ha`) was built beside the old one with the same listener, pool, three members and `/healthz` monitor, the floating IP `192.168.2.113` was moved to its VIP port (about 5 s without Argo's web address), the old one was deleted with `--cascade`, and the new one was renamed `argo-lb` (listener `argo-http`, pool `argo-backend`, monitor `argo-backend-hm`). Script: `scripts/octavia-argo-lb-ha.sh` (run on `c3`; it refuses to switch unless all members are `ONLINE`, and puts the floating IP back if the new one does not answer 200).
+**Proof:** the MASTER amphora of `argo-lb` was powered off with requests every 0.5 s: **100 of 100 requests HTTP 200**, the standby carried the traffic; the amphora was started again afterwards and both are `ALLOCATED`. Total amphorae now 4 (two per load balancer, 2 GB each).
+
+### `argo-lb` (Argo CD, its own load balancer), original build
 Argo used to be a second pool on `finance-lb`, selected by Host header (L7 policies `argo` / `argo-host`). On 2026-10-20 it moved
 to a load balancer of its own, so a problem or change on one never touches the other. The policies and `argo-pool` were deleted
 from `finance-lb` after DNS pointed at the new address.
 ```bash
-openstack loadbalancer create --name argo-lb --vip-subnet-id private_subnet     # no flavor = SINGLE (one amphora); add --flavor ha for ACTIVE_STANDBY
+openstack loadbalancer create --name argo-lb --vip-subnet-id private_subnet     # no flavor = SINGLE (one amphora); --flavor ha = ACTIVE_STANDBY (what argo-lb uses now; a topology cannot be changed in place, see scripts/octavia-argo-lb-ha.sh for the swap)
 openstack loadbalancer listener create --name argo-http --protocol HTTP --protocol-port 80 --insert-headers X-Forwarded-For=true argo-lb
 openstack loadbalancer pool create --name argo-backend --lb-algorithm ROUND_ROBIN --listener argo-http --protocol HTTP
 openstack loadbalancer member create --name wN --subnet-id private_subnet --address <private ip> --protocol-port 30443 argo-backend   # per worker

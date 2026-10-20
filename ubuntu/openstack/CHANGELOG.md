@@ -45,6 +45,10 @@ Update this file in the same commit as any change, and list anything done **by h
 - All 19 VMs started by themselves after the reset, both front doors 200 about 4 minutes after `c3` answered ssh, no load balancer failovers, no stuck VM (`docs/c3-reboot.md` Test 6; an earlier wording that called it a clean plain reboot was wrong, the shutdown had hung and the host was reset by hand).
 - **Why `systemctl reboot` hangs:** `ovn-controller` and the other network services stopped before `libvirt-guests` shut the guests down, so the prod workers (`w1` to `w3`) lost their network and sat for the full 300 s shutdown timeout. Added the drop-in `/etc/systemd/system/libvirt-guests.service.d/20-order-after-ovn.conf` on `c3` (by hand, untested). **Standing rule: restart `c3` with a force reboot** until a plain reboot has been seen to complete.
 
+### Load balancers: `argo-lb` is ACTIVE_STANDBY, dead amphora repaired in 5 minutes (OpenStack, by hand, scripted)
+- `argo-lb` rebuilt as ACTIVE_STANDBY with `scripts/octavia-argo-lb-ha.sh` (new VIP `10.0.1.76`, the floating IP `192.168.2.113` moved, old load balancer deleted): master amphora powered off, 100 of 100 requests HTTP 200. Four amphorae now.
+- `heartbeat_timeout` 900 -> **300** (and `octavia-health-manager` restarted; backup `/root/octavia.conf.bak-20261020-heartbeat`). Plain reboot of `c3` afterwards: 0 failovers, same four amphorae, front doors 200.
+
 ### Database replication is now synchronous (zero acknowledged-write loss on a primary failure)
 - Patroni `synchronous_mode: true`, `synchronous_node_count: 1` (not strict) on the live pair and in `cloud-init/files/db-ha-node.sh`. Drilled: primary powered off during writes, highest acknowledged commit == last row on the new primary (1470 / 1470); standby powered off: writes pause 34.5 s then continue asynchronously. New probe `scripts/db-sync-loss-probe.py`. Also raised on `c3` (by hand, backup `/root/nova.conf.bak-20261020-ratios`): `ram_allocation_ratio` 1.5 and `disk_allocation_ratio` 2.0 (physical use: RAM 46 of 80 GB, disk 40 GB free), needed for the redundancy work below.
 

@@ -12,7 +12,7 @@ What is deliberately not done yet, who decides, and what finishes it. Update thi
 ## Accepted limits (no action planned)
 - Database replication is synchronous but not strict: a standby outage means about 35 s of paused writes, then asynchronous until it returns (`db-ha-patroni.md`).
 - Losing two of the three etcd machines (`dbw` and one database) stops automatic database failover until one is back.
-- A really dead amphora is replaced automatically only after 15 minutes (`heartbeat_timeout = 900`, `amphora-reboot-fix.md`).
+- A really dead amphora is replaced automatically after 5 minutes (`heartbeat_timeout = 300`) or at once with `openstack loadbalancer failover <lb>`; both load balancers have a standby (`amphora-reboot-fix.md`).
 - Single control-plane node per Kubernetes cluster (prod, qa, cka).
 
 ## Done recently (so nobody redoes it)
