@@ -1,0 +1,6 @@
+#cloud-config
+# Third voter for the database pair (docs/db-auto-failover-plan.md). It only runs etcd, which scripts/db-ha-setup.sh installs and
+# configures together with the two database VMs, so nothing is installed here: a package installed by cloud-init would start a
+# single-node etcd with its own cluster id that would have to be wiped again.
+runcmd:
+  - 'for i in 1 2 3 4 5; do DEBIAN_FRONTEND=noninteractive apt-get install -y -o DPkg::Lock::Timeout=120 curl jq dnsutils && break; sleep 20; done'

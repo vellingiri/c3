@@ -7,6 +7,7 @@ locals {
     runner     = ["base", "runner"]
     database   = ["base", "database"]
     learn      = ["base", "learn"]
+    witness    = ["base", "witness"] # etcd tie-breaker for the database pair; etcd itself is set up by scripts/db-ha-setup.sh
   }
 
   fqdn = "${var.name}.${var.domain}"

@@ -30,6 +30,8 @@ nodes:
   db1: { role: database, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
   # db2: streaming replica of db1; configured with scripts/db-replica-setup.sh (see docs/db-replication.md).
   db2: { role: database, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
+  # db-witness: third voter (etcd only) so the database pair can fail over automatically without split brain.
+  db-witness: { role: witness, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
   # runner has default + k8s SGs, which equal the defaults, so no override needed.
   runner: { role: runner, flavor: m1.large, domain: rdulinux.com }
 
