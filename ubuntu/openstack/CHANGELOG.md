@@ -6,6 +6,30 @@ Update this file in the same commit as any change, and list anything done **by h
 
 ---
 
+## 2026-10-20 (later): automatic database failover (Patroni)
+
+### Breaking changes
+| Gone / changed | Now |
+|---|---|
+| Manual database failover (`pg_promote`, `db-replica-setup.sh` by hand) | **do not use on db1/db2**; Patroni owns PostgreSQL. Use `patronictl switchover` / `failover` / `reinit` (`docs/db-ha-patroni.md`). `postgresql@16-main` is masked on both |
+| `DATABASE_URL` with one host | two hosts, `target_session_attrs=read-write`; the app finds the writable one |
+| `db.rdulinux.com` followed the primary | still points at the original primary, **not updated on failover**; nothing uses it |
+| 17 VMs | **18**: new `db-witness` (m1.tiny, 10.0.1.120 / 192.168.2.104). Memory headroom on `c3` is now ~1.1 GB |
+
+### What was built
+- Patroni 3.2.2 on `db1`/`db2` (adopted the existing data, about 2 s of failed writes), etcd 3.4 with three members (`db1`, `db2`, `db-witness`), nftables guard for etcd/Patroni ports, ntfy message on every role change.
+- App (finance repo, `sha-aa0101f`): per-host connect timeout and `FailoverPool`, query timeout, scheduler leader watchdog, `pg_dump` connect timeout.
+- Monitor (`db-replication-monitor`) also checks Patroni on each node, the cluster view and the witness.
+- **Drills, all passed on live prod:** planned switchover 14-16 s; process kill ~5 s; primary VM power-off ~40 s (app self-recovered, no data loss); network partition (no split brain, ~12 s failed writes); witness loss (no effect). The first VM-crash drill found the asyncpg shared-timeout problem, fixed and repeated.
+
+### Limits
+Asynchronous replication (a hard failure can lose the last seconds of writes); losing two of the three etcd machines stops automatic failover.
+
+### Not in Terraform
+Patroni and etcd configs, nftables guard, patroni-notify, `pg_hba` lines, monitor on the runner (all listed in `docs/db-ha-patroni.md`). In Terraform: role `witness` and VM `db-witness`.
+
+---
+
 ## 2026-10-20: load balancers, 3-replica HA, database replica
 
 ### Breaking changes (names and addresses that no longer work)

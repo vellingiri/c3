@@ -1,12 +1,16 @@
 # Finance database: primary `db1` and streaming replica `db2`
 
+> **Since 2026-10-20 the pair is run by Patroni** (automatic failover, etcd witness `db-witness`). Day-to-day operation, failover, switchover and recovery are in
+> **[db-ha-patroni.md](db-ha-patroni.md)**. This page is the build record and background. **Do not use the manual `pg_promote` / `db-replica-setup.sh` steps below on a
+> Patroni node** (Patroni would fight them); use `patronictl switchover` / `failover` / `reinit` instead. Replication monitoring (below) still applies.
+
 Built and rehearsed 2026-10-20. PostgreSQL 16.15 (Ubuntu packages) on both VMs.
 
 ## What this gives you, and what it does not
 - **Gives you:** a second, continuously updated copy of the database on another VM. If `db1` is lost, `db2` can be promoted in
   seconds and the app pointed at it (about 5 minutes of work, steps below). It also gives you a place to run heavy read queries.
 - **Does not give you:**
-  - **Automatic failover.** Promotion and repointing are manual on purpose; there is no Patroni/repmgr.
+  - **Automatic failover** (when this page was written; added later with Patroni, see `db-ha-patroni.md`).
   - **Zero data loss.** Replication is asynchronous, so a transaction acknowledged just before a crash may be missing on the replica.
     Normally the lag is 0 bytes (see Monitoring).
   - **A backup.** A `DROP TABLE` or a bad `UPDATE` replicates immediately. Hourly/daily `pg_dump` backups (`finance-db-restore.md`) stay the
@@ -89,7 +93,7 @@ Limits: it runs on the runner, so if the runner or its internet access is down y
 Things that break replication: the replica VM is down (the slot then keeps WAL on the primary, capped at 2 GB; beyond that the replica must be rebuilt),
 a changed `pg_hba.conf`, a different Postgres major version on the two hosts (never mix them), a full disk.
 
-## Failover: the primary (db1) is lost
+## Failover: the primary (db1) is lost (manual procedure, before Patroni; now automatic, see db-ha-patroni.md)
 The goal is one writable primary. **Never leave both writable** (split brain).
 1. **Confirm and fence.** Make sure `db1` is really gone, then stop it so it cannot come back writing:
    `ssh c3 'openstack server stop db1'` (a `409 ... vm_state stopped` means it is already off). If it is just unreachable, stop it anyway,

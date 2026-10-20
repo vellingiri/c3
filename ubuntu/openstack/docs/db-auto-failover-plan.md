@@ -1,7 +1,7 @@
-# Plan: automatic failover for the finance database (design only, nothing built)
+# Plan: automatic failover for the finance database
 
-Status: proposal written 2026-10-20. Nothing here has been installed or changed on any server. It needs your decisions (last section)
-before work starts.
+**Status: implemented 2026-10-20** (Phase 0 plus Patroni with a 3-member etcd and a new `m1.tiny` witness VM, all five drills passed).
+What exists and how to run it: **[db-ha-patroni.md](db-ha-patroni.md)**. The text below is the original proposal, kept for the reasoning.
 
 ## Why, and what "good" means
 Today `db1` is the primary and `db2` a streaming replica (`db-replication.md`). If `db1` dies, a person has to notice (the monitor alerts within

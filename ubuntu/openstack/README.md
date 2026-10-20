@@ -13,6 +13,7 @@ cloud-init/*.tftpl       reusable cloud-init parts, composed per role
 scripts/adopt-node.sh    bring an existing VM under Terraform without recreating it
 scripts/k8s-copy-between.sh  copy k8s objects between clusters through two local kubeconfigs (secrets stay in the pipe)
 scripts/db-replica-setup.sh  make db2 a streaming replica of db1 (re-runnable);  scripts/db-replication-status.sh checks it
+scripts/db-ha-etcd.sh, scripts/db-ha-patroni.sh  etcd (db1, db2, db-witness) and Patroni for automatic database failover (docs/db-ha-patroni.md)
 scripts/install-db-monitor.sh  install the replication monitor + ntfy alerts on the runner (scripts/db-replication-monitor.sh)
 docs/                    architecture, runbooks and design records (index: docs/README.md)
 CHANGELOG.md             release notes for the infrastructure
@@ -37,7 +38,8 @@ Roles (`role:` in `nodes.yaml`, one cloud-init composition each in `modules/node
 | `install-etcd-snapshot.sh` | add the etcd snapshot timer to an existing controller |
 | `install-ingress-nginx.sh` | install ingress-nginx (NodePort 30080) on a cluster |
 | `db-replica-setup.sh`, `db-replication-status.sh` | build and check the PostgreSQL replica (`docs/db-replication.md`) |
-| `install-db-monitor.sh`, `db-replication-monitor.sh` | replication alerts on the runner |
+| `install-db-monitor.sh`, `db-replication-monitor.sh` | replication, Patroni and witness alerts on the runner |
+| `db-ha-etcd.sh`, `db-ha-patroni.sh` | build/check etcd and Patroni on the database VMs (`docs/db-ha-patroni.md`) |
 | `ovn-vip-binding-reconciler.py`, `install-ovn-vip-reconciler.sh` | the 30-second watcher on `c3` that keeps OVN's router entry for each Octavia VIP pointing at the amphora that answers (`docs/amphora-reboot-fix.md`) |
 | `openstack-shortcuts.sh` | `openstack server list` with an `Env` column (source it in your shell) |
 

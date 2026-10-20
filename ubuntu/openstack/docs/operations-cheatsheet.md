@@ -8,7 +8,7 @@ Commands you need every week, and a "is everything healthy?" sweep. Details live
 |---|---|---|
 | `ssh c1` `ssh w1` ... `ssh w5` | `<name>.prod.rdulinux.com` | prod Kubernetes nodes, user root, key `id_ed25519` |
 | `ssh c1.prod` `ssh w2.qa` `ssh learn.qa` | `<name>.<env>.rdulinux.com` | any VM, either environment (`w1` exists in both: `ssh w1.prod`, `ssh w1.qa`) |
-| `ssh db1` `ssh db2` | the two database VMs | key `id_ed25519.c3` |
+| `ssh db1` `ssh db2` `ssh db-witness` | the two database VMs and the etcd tie-breaker VM | key `id_ed25519.c3`. On db1/db2: `patronictl list` |
 | `ssh db` | whoever `db.rdulinux.com` points at (the primary) | after a failover your Mac may cache the old answer: `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` |
 | `ssh runner` `ssh repo` `ssh backup` `ssh c3` | shared services and the cloud host | key `id_ed25519.c3` |
 `/opt/c3/bin/mssh host1 host2 ...` opens synchronized tmux panes (type once, runs on all).
@@ -55,7 +55,8 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 | Load balancers | `ssh c3 'openstack loadbalancer list; openstack loadbalancer member list finance-pool; openstack loadbalancer member list argo-backend'` | `ACTIVE`/`ONLINE`, 4 members `ONLINE` each |
 | Kubernetes | `kubectl --kubeconfig ~/.kube/prod get nodes` and `k get pods -o wide` and `k get pdb` | 6 nodes Ready (c1 + w1 to w5); 3 of backend, frontend, docs, nginx, each on a different node |
 | Argo app | `kubectl --kubeconfig ~/.kube/prod -n argocd get application finance-qa` | Synced, Healthy |
-| Database path | `k exec deploy/backend -- sh -c 'psql "$DATABASE_URL" -qAt -c "select inet_server_addr(), pg_is_in_recovery()"'` | `10.0.1.191`, `f` |
+| Database path | `k exec deploy/backend -- sh -c 'psql "$DATABASE_URL" -qAt -c "select inet_server_addr(), pg_is_in_recovery()"'` | the current leader's address, `f` (after a failover this is `10.0.1.69`, which is fine) |
+| Patroni | `ssh db1 patronictl list` | one `Leader running`, one `Replica streaming`, lag 0, same TL |
 | Replication | `scripts/db-replication-status.sh db1 db2` | `streaming, behind: 0 bytes`, exit 0 |
 | Monitor | `ssh runner 'systemctl is-active db-monitor.timer; /usr/local/sbin/db-replication-monitor --dry-run'` | `active`; `db1 primary, db2 replica, lag 0 bytes` |
 | Backups | `k get cronjob` and `k get jobs --sort-by=.metadata.creationTimestamp \| tail -3` | hourly and daily jobs `Complete` |

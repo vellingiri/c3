@@ -11,14 +11,15 @@ All documents were checked against the live system on 2026-10-20; each says what
 | see what changed and when (and what broke compatibility) | [../CHANGELOG.md](../CHANGELOG.md) |
 | add or retire a Kubernetes worker, drain a node, roll back a deploy | [k8s-operations.md](k8s-operations.md) |
 | work on the finance front door or Argo's address, change load balancer members | [octavia-finance-lb.md](octavia-finance-lb.md) |
-| deal with the database: failover, switchover, rebuild the replica, replication alerts | [db-replication.md](db-replication.md) |
+| deal with the database: failover, switchover, rebuild a replica, Patroni/etcd problems | [db-ha-patroni.md](db-ha-patroni.md) |
+| how the replica was built, replication alerts (background) | [db-replication.md](db-replication.md) |
 | restore data from a backup | [finance-db-restore.md](finance-db-restore.md) |
 | rebuild a whole Kubernetes cluster | [prod-k8s-rebuild.md](prod-k8s-rebuild.md), [etcd-restore-rehearsal.md](etcd-restore-rehearsal.md) |
 | understand why Terraform looks the way it does, or adopt a VM | [terraform-v2-migration.md](terraform-v2-migration.md), [../README.md](../README.md) |
 | reboot `c3` (or recover after it rebooted); how VMs restart by themselves, the nmbd and name-lookup fixes | [c3-reboot.md](c3-reboot.md) |
 | understand why load balancers broke after a host reboot and how it was fixed (patched amphora image, health-manager setting, OVN watcher) | [amphora-reboot-fix.md](amphora-reboot-fix.md) |
 | understand or undo the route that lets `c3` reach private VM addresses | [c3-host-route.md](c3-host-route.md) |
-| decide about automatic database failover | [db-auto-failover-plan.md](db-auto-failover-plan.md) (proposal, nothing built) |
+| why automatic database failover was designed this way | [db-auto-failover-plan.md](db-auto-failover-plan.md) (implemented) |
 
 ## By document
 | Document | Type | Status |
@@ -27,8 +28,9 @@ All documents were checked against the live system on 2026-10-20; each says what
 | operations-cheatsheet.md | reference | current |
 | k8s-operations.md | runbook | current; node add/retire procedures follow the 2026-10-20 `w4`/`w5`/`w1` changes (rehearsed live) |
 | octavia-finance-lb.md | build record + runbook | current; load balancers created by hand |
-| db-replication.md | build record + runbook | current; switchover and crash failover rehearsed on live prod |
-| db-auto-failover-plan.md | proposal | nothing built; waiting for decisions |
+| db-ha-patroni.md | runbook + proof | current; five failure drills passed on live prod 2026-10-20 |
+| db-replication.md | build record (background) | replication build and monitoring current; its manual failover steps are superseded by Patroni |
+| db-auto-failover-plan.md | design record | implemented 2026-10-20 |
 | finance-db-restore.md | runbook + proof | current; `pg_dump` mismatch fixed 2026-10-20 |
 | prod-k8s-rebuild.md | runbook + execution log | procedure executed 2026-10-19 with haproxy; the Octavia adaptation at the top is **not rehearsed** |
 | etcd-restore-rehearsal.md | runbook + proof | rehearsed 2026-10-19 on QA |

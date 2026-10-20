@@ -15,7 +15,7 @@ load balancers, Kubernetes objects and the monitor are not (see "What Terraform 
 | **prod / qa** (this repo) | The two Terraform environments: `environments/prod` and `environments/qa`. Each has its own Kubernetes cluster and DNS zone. |
 | **"QA"** (finance repo) | The finance repo calls its Kubernetes deployment "QA" (branch `develop`, Argo application `finance-qa`, CI job "Restart QA Pods"). **That deployment runs in the infra "prod" cluster.** The real production of the finance app is a separate Docker Compose host (`yourassets.in`), not in this repo. |
 | **infra "qa" cluster** | Currently runs nothing of the finance app (only ingress-nginx). It is a spare cluster and was the parking place while prod was rebuilt on 2026-10-19. |
-| **primary / replica** | `db1` is the writable PostgreSQL, `db2` follows it. Roles can swap; the host names do not (see `db-replication.md`). |
+| **primary / replica** | one DB host is writable, the other follows it. **Patroni swaps the roles by itself on failure**; the host names do not move. The app lists both hosts in `DATABASE_URL` and finds the writable one (`db-ha-patroni.md`). |
 | **`db.rdulinux.com`** | A DNS alias for whichever database is primary right now. |
 
 ## Addresses and names
@@ -30,8 +30,9 @@ Nodes talk over the private network; people and the load balancers use floating 
 | `backup` | 192.168.2.4 | n/a | backup host (off-host copies, e.g. `/backup/finance-qa/pre-rebuild-20261019/`) |
 | `finance` | 192.168.2.5 | VIP 10.0.1.89 | the finance app, served by Octavia `finance-lb` |
 | `argo` | 192.168.2.113 | VIP 10.0.1.56 | Argo CD, served by Octavia `argo-lb` |
-| `db1` | 192.168.2.124 | 10.0.1.191 | PostgreSQL 16, **primary** (m1.small) |
-| `db2` | 192.168.2.135 | 10.0.1.69 | PostgreSQL 16, **replica** (m1.small) |
+| `db1` | 192.168.2.124 | 10.0.1.191 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **primary**) (m1.small) |
+| `db2` | 192.168.2.135 | 10.0.1.69 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **replica**) (m1.small) |
+| `db-witness` | 192.168.2.104 | 10.0.1.120 | third etcd voter only, no data (m1.tiny) |
 | `db` | 192.168.2.124 (TTL 60) | n/a | alias of the current primary; edit `infra.yaml` to fail over |
 | `runner` | 192.168.2.144 | 10.0.1.47 | GitHub Actions self-hosted runner + the replication monitor (m1.large) |
 | `@`, `www`, `rdu` | 13.140.58.46 | n/a | public address (not a lab VM) |
@@ -92,7 +93,7 @@ after `db2` and `argo-lb`. A new `m1.small` is 4 GB, an `m1.tiny` 2 GB, an ampho
 ## Data protection map
 | What | Protection | Proof / doc |
 |---|---|---|
-| Finance database | hourly and daily `pg_dump` to NFS; a streaming replica (`db2`); alerts on replica health | `finance-db-restore.md`, `db-replication.md` |
+| Finance database | hourly and daily `pg_dump` to NFS; streaming replica with **automatic failover** (Patroni, 3-member etcd; losing any one of db1/db2/db-witness is survived, losing two is not); alerts on replica, Patroni and witness health | `finance-db-restore.md`, `db-ha-patroni.md` |
 | Kubernetes state | etcd snapshot timer on each controller (`/var/backups/etcd`, copied to NFS) | `etcd-restore-rehearsal.md` |
 | Files (uploads, logs) | NFS on `repo`; a tarball copy on `backup` before risky work | `prod-k8s-rebuild.md` |
 | Terraform state | S3 (MinIO) bucket with locking | `../README.md` |
