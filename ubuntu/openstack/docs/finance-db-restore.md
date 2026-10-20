@@ -2,7 +2,8 @@
 
 Backups: the `db-backup-hourly` / `db-backup-daily` CronJobs (finance namespace) write
 `finance-*.sql.gz` (plain SQL) to the NFS share `repo:/exports/finance-qa/backups/finance/{hourly,daily,weekly,manual}`
-(24 hourly, 7 daily, 4 weekly kept). The database itself runs on the shared `db` VM (PostgreSQL 16).
+(24 hourly, 7 daily, 4 weekly kept). The database itself runs on `db1` (PostgreSQL 16) with a streaming replica on `db2`; see `db-replication.md`. `ssh db` follows the DNS alias
+`db.rdulinux.com`, i.e. the current primary, which is where the restore tests below must run (a replica is read only).
 
 ## Fixed: dumps now restore with plain psql (2026-10-20)
 The backup job used to run a PostgreSQL 17 `pg_dump` against the 16 server, so every dump contained

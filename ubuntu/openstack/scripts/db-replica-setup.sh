@@ -57,7 +57,8 @@ HBA='host replication replicator 10.0.1.0/24 scram-sha-256'
 ssh "$PRIMARY" "grep -qxF '$HBA' $CONF/pg_hba.conf || echo '$HBA' | sudo tee -a $CONF/pg_hba.conf >/dev/null; sudo -u postgres psql -qAtc 'select pg_reload_conf()' >/dev/null"
 
 say "Replica: stop, replace the data directory with a copy of the primary"
-ssh "$REPLICA" "sudo systemctl stop postgresql; sudo find $DATA -mindepth 1 -delete"
+# Stop the instance itself: stopping the umbrella "postgresql" unit returns before the server has exited.
+ssh "$REPLICA" "sudo systemctl stop postgresql@$PGV-main; ! pgrep -u postgres -x postgres >/dev/null; sudo find $DATA -mindepth 1 -delete"
 printf '%s:5432:replication:replicator:%s\n' "$P_IP" "$PW" |
   ssh "$REPLICA" "sudo -u postgres tee /var/lib/postgresql/.pgpass >/dev/null; sudo chmod 600 /var/lib/postgresql/.pgpass"
 ssh "$REPLICA" "sudo -u postgres pg_basebackup -h $P_IP -U replicator -D $DATA -R -X stream -S $SLOT -c fast"
@@ -75,7 +76,7 @@ ssh "$REPLICA" "sudo systemctl start postgresql"
 
 say "Wait for streaming"
 for i in $(seq 1 30); do
-  S=$(echo "select state from pg_stat_replication where application_name = 'walreceiver'" | psql_on "$PRIMARY")
+  S=$(echo "select state from pg_stat_replication where client_addr = '$R_IP'" | psql_on "$PRIMARY")
   [ "$S" = streaming ] && break
   sleep 2
 done

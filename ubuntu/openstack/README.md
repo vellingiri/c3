@@ -9,6 +9,9 @@ modules/                 network, security, keypair, image, dns, node
 cloud-init/*.tftpl       reusable cloud-init parts, composed per role
 scripts/adopt-node.sh    bring an existing VM under Terraform without recreating it
 scripts/k8s-copy-between.sh  copy k8s objects between clusters through two local kubeconfigs (secrets stay in the pipe)
+scripts/db-replica-setup.sh  make db2 a streaming replica of db1 (re-runnable);  scripts/db-replication-status.sh checks it
+docs/                    runbooks: db-replication (db1/db2 failover), octavia-finance-lb (finance-lb, argo-lb),
+                         finance-db-restore (backups), prod-k8s-rebuild, etcd-restore-rehearsal
 ```
 
 Apply order: `infra` first, then `environments/<env>`. Environments read infra's
@@ -30,7 +33,7 @@ outputs through its remote state (`openstack/infra/terraform.tfstate`).
 - Each environment has its own DNS zone, set by `domain` in its `nodes.yaml`: prod nodes live
   in `prod.rdulinux.com` (`c1.prod.rdulinux.com`), qa in `qa.rdulinux.com` (`c1.qa.rdulinux.com`).
   Zones are listed in `infra/infra.yaml` (`dns.extra_zones`). Shared services (`db`, `runner`)
-  override `domain: rdulinux.com` so names like `db.rdulinux.com` keep working.
+  override `domain: rdulinux.com`. `db1`/`db2` are the database hosts; `db.rdulinux.com` is an alias for the current primary (infra.yaml, TTL 60 s).
   OpenStack server names can repeat across environments; use the tag or the ID to tell them apart.
 - Per-cluster join info lives in `/nfsshare/join-<cluster_name>.sh`.
 - Records owned by `infra` (e.g. the load balancer name) use `manage_dns: false` on the node.
