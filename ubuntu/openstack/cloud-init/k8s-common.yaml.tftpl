@@ -9,6 +9,12 @@ write_files:
       net.bridge.bridge-nf-call-iptables=1
       net.bridge.bridge-nf-call-ip6tables=1
       net.ipv4.ip_forward=1
+  # kubelet must hand pods the static resolver file (our DNS server 192.168.2.2), not systemd-resolved's (a fresh VM lists only the subnet's 8.8.8.8): host-network pods such as
+  # kube-proxy and calico resolve api.<env>.rdulinux.com with it. Set BEFORE kubeadm init/join so the first pods already have it (pods keep the resolver they started with;
+  # changing it later needed their restart: found on the prod control-plane nodes, docs/k8s-ha-control-plane.md).
+  - path: /etc/default/kubelet
+    content: |
+      KUBELET_EXTRA_ARGS=--resolv-conf=/etc/resolv.conf
   - path: /etc/crictl.yaml
     content: |
       runtime-endpoint: unix:///run/containerd/containerd.sock
