@@ -68,10 +68,12 @@ listen_addresses = '*'
 hot_standby_feedback = on
 max_slot_wal_keep_size = 2GB
 CONF
-# Same client rules as the primary, so this host can take over without touching pg_hba.conf.
-RULES=$(ssh "$PRIMARY" "grep -E '^host +(financedb|replication) ' $CONF/pg_hba.conf")
-ssh "$REPLICA" "sudo tee -a $CONF/pg_hba.conf >/dev/null" <<<"# copied from $PRIMARY by scripts/db-replica-setup.sh
-$RULES"
+# Same app and replication rules as the primary, so this host can take over without touching pg_hba.conf.
+# Only lines the replica does not have yet are added (re-running must not pile up duplicates).
+ssh "$PRIMARY" "grep -E '^host +(financedb +financeapp|replication +replicator) ' $CONF/pg_hba.conf" |
+  while IFS= read -r rule; do
+    ssh "$REPLICA" "grep -qxF '$rule' $CONF/pg_hba.conf || echo '$rule' | sudo tee -a $CONF/pg_hba.conf >/dev/null"
+  done
 ssh "$REPLICA" "sudo systemctl start postgresql"
 
 say "Wait for streaming"

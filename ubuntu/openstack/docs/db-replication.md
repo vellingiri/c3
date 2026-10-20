@@ -51,12 +51,42 @@ and empty its data directory** -> `pg_basebackup -R -X stream -S slot_db2` -> sa
 `streaming` on the primary. Run three times from scratch (the first run exposed two bugs, both fixed).
 
 ## Monitoring: is it following?
-```bash
-scripts/db-replication-status.sh db1 db2        # read-only; exit code 0 = streaming and under 1 MB behind
-```
+**By hand:** `scripts/db-replication-status.sh db1 db2` (read-only; exit 0 = streaming and under 1 MB behind).
 Healthy output: `streaming | async | 0` in the walsender line, the slot `active` with a few bytes retained, `in recovery: t` on the replica.
-Nothing alerts on this yet; run it after any change to either VM, and consider a timer that pages on a non-zero exit code.
-Things that break it: the replica VM is down (the slot then keeps WAL on the primary, capped at 2 GB; beyond that the replica must be rebuilt),
+
+**Automatic alerts (installed 2026-10-20):** a systemd timer on the **runner** VM runs `/usr/local/sbin/db-replication-monitor` every 2 minutes
+and pushes to a private [ntfy.sh](https://ntfy.sh) topic. Subscribe to the topic in the ntfy app or browser; the topic name is the "password" of
+the channel, so it is not in git. It lives in `/etc/default/db-monitor` on the runner (mode 0600, together with the monitor login):
+`ssh runner "sed -n 's#^NTFY_URL=##p' /etc/default/db-monitor"`.
+
+| It alerts when | Priority |
+|---|---|
+| a database is unreachable or refuses the monitor login | urgent |
+| there is no writable primary, or **two** (split brain) | urgent |
+| the primary has no streaming replica | urgent |
+| replica more than 16 MB (WAL) behind | urgent |
+| a replication slot is inactive, or holds more than 1.5 GB of WAL (the cap is 2 GB) | urgent |
+| the replica's receiver is not `streaming` | urgent |
+| still broken after 6 hours (reminder) / back to healthy | high / normal |
+
+It notifies on **changes** only, so a long outage does not flood you. It watches both hosts by role (whoever is primary), so it keeps working
+after a failover or switchover with no change. The checks run as the login role `monitor` (member of `pg_monitor`: can read statistics, cannot read
+data), allowed only to the `postgres` database from `10.0.1.0/24` by the rule `host postgres monitor 10.0.1.0/24 scram-sha-256` on both hosts.
+
+Useful commands:
+```bash
+ssh runner 'systemctl list-timers db-monitor.timer --no-pager'        # next / last run
+ssh runner 'journalctl -u db-monitor.service -n 20 --no-pager'        # what it saw
+ssh runner '/usr/local/sbin/db-replication-monitor --dry-run'        # check now, no notification
+ssh runner '/usr/local/sbin/db-replication-monitor --test'           # send a test notification
+```
+(Run these through ssh as above; `--dry-run` exits 1 when there is a problem.) Re-install, rotate the monitor password or move to another runner:
+`scripts/install-db-monitor.sh [runner-host]` (keeps the existing topic; `NTFY_TOPIC=...` sets another). Thresholds are variables in
+`/etc/default/db-monitor` (`LAG_BYTES`, `SLOT_BYTES`, `REMIND_SECONDS`, `DB_HOSTS` as `name=private-ip` pairs).
+**Tested 2026-10-20:** stopped `db2`'s Postgres: one urgent alert (3 problems), no second alert on the next run, one recovery message after the restart.
+Limits: it runs on the runner, so if the runner or its internet access is down you get nothing; it does not check disk space.
+
+Things that break replication: the replica VM is down (the slot then keeps WAL on the primary, capped at 2 GB; beyond that the replica must be rebuilt),
 a changed `pg_hba.conf`, a different Postgres major version on the two hosts (never mix them), a full disk.
 
 ## Failover: the primary (db1) is lost
@@ -125,6 +155,8 @@ commands are the same ones proven above; what differs is that the last few trans
 - **Disk filling on the primary:** `select slot_name, active, pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) from pg_replication_slots`.
   A dead replica's slot is capped at 2 GB; drop it with `select pg_drop_replication_slot('slot_db2')` if the replica is gone.
 - **`ssh db1` works but `ssh db` does not (or the reverse):** `db` follows DNS; check `dig +short db.rdulinux.com @192.168.2.2`.
+- **`pg_hba.conf` full of repeated rules:** an earlier version of the setup script appended the primary's rules on every rebuild. It now adds only
+  missing lines; the duplicates were removed on 2026-10-20 (backups next to the file: `pg_hba.conf.bak-20261020`).
 - **cloud-init shows `error` on `db2`:** the known harmless `update-locale` message, not a failure.
 
 ## Removing the replica
@@ -134,5 +166,5 @@ commands are the same ones proven above; what differs is that the last few trans
 ## Not done (decisions for later)
 - Automatic failover (Patroni or repmgr with a witness) and a virtual IP so the app never needs its secret edited.
 - Synchronous replication (no data loss, but writes stop if the replica is down).
-- Alerting on replication lag or a stopped replica.
+- Alerting independent of the runner (a second watcher elsewhere), and disk-space checks on the two DB VMs.
 - Reading from the replica (reports, the nightly backup) to take load off the primary. The backup jobs still dump from the primary.
