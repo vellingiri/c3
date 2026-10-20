@@ -2,6 +2,8 @@ locals {
   # Ordered cloud-init parts per role. Add a role = add a line here + a template.
   role_parts = {
     controller = ["base", "k8s-common", "k8s-controller"]
+    # a 2nd/3rd control-plane node: joins the running cluster through the API load balancer (docs/k8s-ha-control-plane.md)
+    controller_join = ["base", "k8s-common", "k8s-controller-join"]
     worker     = ["base", "k8s-common", "k8s-worker"]
     gitlab     = ["base", "gitlab"]
     runner     = ["base", "runner"]
@@ -23,6 +25,9 @@ locals {
     etcd_snapshot_service = file("${var.cloud_init_dir}/files/etcd-snapshot.service")
     etcd_snapshot_timer   = file("${var.cloud_init_dir}/files/etcd-snapshot.timer")
     db_ha_node_script     = file("${var.cloud_init_dir}/files/db-ha-node.sh")
+    k8s_publish_join_script  = file("${var.cloud_init_dir}/files/k8s-publish-join.sh")
+    k8s_publish_join_service = file("${var.cloud_init_dir}/files/k8s-publish-join.service")
+    k8s_publish_join_timer   = file("${var.cloud_init_dir}/files/k8s-publish-join.timer")
   })
 }
 

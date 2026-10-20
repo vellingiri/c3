@@ -13,6 +13,20 @@ write_files:
   - path: /etc/default/etcd-snapshot
     content: |
       REMOTE_DIR=/nfsshare/etcd-backups/${cluster_name}
+  # publishes fresh worker and control-plane join commands on the NFS share every hour, so later nodes join by themselves
+  - path: /etc/k8s-cluster-name
+    content: |
+      ${cluster_name}
+  - path: /usr/local/sbin/k8s-publish-join
+    permissions: '0755'
+    content: |
+      ${indent(6, k8s_publish_join_script)}
+  - path: /etc/systemd/system/k8s-publish-join.service
+    content: |
+      ${indent(6, k8s_publish_join_service)}
+  - path: /etc/systemd/system/k8s-publish-join.timer
+    content: |
+      ${indent(6, k8s_publish_join_timer)}
 
 runcmd:
   # the NFS share is common to all clusters, so join info is per cluster
@@ -21,8 +35,15 @@ runcmd:
   - |
     LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
     PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+    %{ if api_endpoint != "" ~}
+    # HA cluster: the shared API address (Octavia load balancer `${cluster_name}-api`, name in infra/infra.yaml) is the endpoint of every node
+    ENDPOINT="${api_endpoint}"
+    %{ else ~}
+    ENDPOINT="$PUBLIC_IP"
+    %{ endif ~}
     kubeadm init \
-      --control-plane-endpoint "$PUBLIC_IP:6443" \
+      --control-plane-endpoint "$ENDPOINT:6443" \
+      --apiserver-cert-extra-sans "$ENDPOINT,$PUBLIC_IP" \
       --apiserver-advertise-address "$LOCAL_IP" \
       --pod-network-cidr ${pod_cidr} \
       --cri-socket unix:///run/containerd/containerd.sock
@@ -36,8 +57,8 @@ runcmd:
   - |
     su ubuntu -c "kubectl -n kube-system patch deployment metrics-server --type=json -p '[{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--kubelet-insecure-tls\"}]'"
   # publish join command for workers
-  - kubeadm token create --print-join-command > /nfsshare/join-${cluster_name}.sh && chmod +x /nfsshare/join-${cluster_name}.sh
-  - systemctl daemon-reload && systemctl enable --now etcd-snapshot.timer
+  - /usr/local/sbin/k8s-publish-join
+  - systemctl daemon-reload && systemctl enable --now etcd-snapshot.timer k8s-publish-join.timer
   # kubelet graceful node shutdown: on a host reboot/ACPI power-off the kubelet stops the pods (30 s) while the network and the NFS mounts are still up.
   # Without it the pods' processes were killed after the network was gone, hung, and a worker took ~4.5 min to power off (docs/c3-reboot.md).
   - "sed -i 's/^shutdownGracePeriod: 0s/shutdownGracePeriod: 30s/; s/^shutdownGracePeriodCriticalPods: 0s/shutdownGracePeriodCriticalPods: 10s/' /var/lib/kubelet/config.yaml && systemctl restart kubelet"

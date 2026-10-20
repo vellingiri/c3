@@ -62,6 +62,9 @@ dns:
     db:      { ip: 192.168.2.124, ttl: 60 }
     finance: { ip: 192.168.2.5, ptr: true }   # the finance app, served by finance-lb
     argo:    { ip: 192.168.2.113, ptr: true }   # argo-lb, its own Octavia load balancer (finance-lb keeps 192.168.2.5)
+    # API endpoints of the Kubernetes clusters: Octavia TCP load balancers <env>-api (docs/k8s-ha-control-plane.md); this name is each cluster's controlPlaneEndpoint
+    api-prod: { ip: 192.168.2.61, zone: prod.rdulinux.com., name: api }
+    api-cka:  { ip: 192.168.2.75, zone: cka.rdulinux.com., name: api }
     "@":     { ip: 13.140.58.46 }
     www:     { ip: 13.140.58.46 }
     rdu:     { ip: 13.140.58.46 }

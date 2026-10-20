@@ -9,7 +9,7 @@ What it does, every run (a systemd timer runs it every 30 s on c3, as root):
   1. From OVN's northbound DB, find every VIP and the candidate MACs: an IP that a port is allowed to use in addition to its own fixed IPs
      (the Octavia "vrrp" ports carry the VIP as an allowed address pair) maps to that port's MAC.
   2. Probe each VIP (TCP connect to port 80 from c3, which reaches 10.0.1.0/24 through the static route, see docs/c3-host-route.md;
-     three tries, and nothing is touched if that route is missing). Assumes the load balancers listen on port 80.
+     three tries, and nothing is touched if that route is missing). The load balancers listen on port 80 (apps) or 6443 (Kubernetes API); a VIP counts as answering if either accepts a connection.
   3. If a VIP does not answer, set the router's MAC_Binding for it to each candidate MAC in turn and keep the first one that makes it answer.
      If none works (for example both amphorae are down) the original value is restored, so a run never makes things worse.
 It needs no OpenStack credentials: only ovn-nbctl and ovn-sbctl (root on c3).
@@ -24,7 +24,7 @@ import subprocess
 import sys
 import time
 
-PORT = 80
+PORTS = (80, 6443)   # 80: finance-lb, argo-lb. 6443: the Kubernetes API load balancers (<env>-api, docs/k8s-ha-control-plane.md). A VIP answers if any of them accepts.
 CONNECT_TIMEOUT = 3
 SETTLE = 2          # seconds to wait after changing an entry before probing again
 DRY = "--dry-run" in sys.argv
@@ -73,12 +73,14 @@ def vip_candidates():
 def answers(ip, tries=3):
     """True if the VIP accepts a TCP connection; a few tries, so one lost packet is not mistaken for an outage."""
     for n in range(tries):
-        try:
-            with socket.create_connection((ip, PORT), timeout=CONNECT_TIMEOUT):
-                return True
-        except OSError:
-            if n < tries - 1:
-                time.sleep(1)
+        for port in PORTS:
+            try:
+                with socket.create_connection((ip, port), timeout=CONNECT_TIMEOUT):
+                    return True
+            except OSError:
+                pass
+        if n < tries - 1:
+            time.sleep(1)
     return False
 
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=publish fresh kubeadm join commands every hour
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1h
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

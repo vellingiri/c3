@@ -1,0 +1,7 @@
+[Unit]
+Description=publish the kubeadm join commands of this cluster on the NFS share
+After=kubelet.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/k8s-publish-join

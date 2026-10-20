@@ -22,6 +22,7 @@ defaults:
     calico_version: v3.28.0
     pod_cidr: 192.168.0.0/16
     cluster_name: prod
+    api_endpoint: ""   # name of the cluster's API load balancer once it is HA (api.prod.rdulinux.com); empty = the first controller's floating IP
 
 nodes:
   # Migrated from v1 (adopted in place with scripts/adopt-node.sh):
