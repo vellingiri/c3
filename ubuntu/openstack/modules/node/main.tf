@@ -5,9 +5,9 @@ locals {
     worker     = ["base", "k8s-common", "k8s-worker"]
     gitlab     = ["base", "gitlab"]
     runner     = ["base", "runner"]
-    database   = ["base", "database"]
+    database   = ["base", "db-ha", "database"] # etcd + PostgreSQL + Patroni, joins the running pair by itself (cloud-init/files/db-ha-node.sh)
     learn      = ["base", "learn"]
-    witness    = ["base", "witness"] # etcd tie-breaker for the database pair; etcd itself is set up by scripts/db-ha-setup.sh
+    witness    = ["base", "db-ha", "witness"] # third etcd voter for the database pair
   }
 
   fqdn = "${var.name}.${var.domain}"
@@ -22,6 +22,7 @@ locals {
     etcd_snapshot_script  = file("${var.cloud_init_dir}/files/etcd-snapshot.sh")
     etcd_snapshot_service = file("${var.cloud_init_dir}/files/etcd-snapshot.service")
     etcd_snapshot_timer   = file("${var.cloud_init_dir}/files/etcd-snapshot.timer")
+    db_ha_node_script     = file("${var.cloud_init_dir}/files/db-ha-node.sh")
   })
 }
 
@@ -49,6 +50,8 @@ resource "openstack_networking_port_v2" "this" {
 
   fixed_ip {
     subnet_id = var.subnet_id
+    # null = let Neutron pick. The database group pins its addresses: its members find each other by IP.
+    ip_address = var.private_ip
   }
 
   lifecycle {

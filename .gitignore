@@ -68,3 +68,6 @@ passwords.yml
 cloud-final.txt
 cloud-init.log
 cloud-init-output.log
+
+# Database HA secrets (scripts/db-ha-secrets.sh writes them; never commit)
+secrets.auto.tfvars

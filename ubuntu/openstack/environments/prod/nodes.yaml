@@ -27,11 +27,12 @@ nodes:
   # Migrated from v1 (adopted in place with scripts/adopt-node.sh):
   # Shared services stay in the main zone: apps use db.rdulinux.com.
   # db1 was "db". The name db.rdulinux.com is now a service alias for the current primary (see infra/infra.yaml).
-  db1: { role: database, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
-  # db2: streaming replica of db1; configured with scripts/db-replica-setup.sh (see docs/db-replication.md).
-  db2: { role: database, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
+  db1: { role: database, ip: 10.0.1.191, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
+  # db1 and db2 run PostgreSQL under Patroni (docs/db-ha-patroni.md); a rebuilt one sets itself up from cloud-init and joins the running pair.
+  # `ip` is required for database and witness nodes (the group is built from these addresses; same value the VM already has).
+  db2: { role: database, ip: 10.0.1.69, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
   # db-witness: third voter (etcd only) so the database pair can fail over automatically without split brain.
-  db-witness: { role: witness, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
+  db-witness: { role: witness, ip: 10.0.1.120, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
   # runner has default + k8s SGs, which equal the defaults, so no override needed.
   runner: { role: runner, flavor: m1.large, domain: rdulinux.com }
 

@@ -1,0 +1,24 @@
+#cloud-config
+# Common part of the database HA group (roles database and witness): installs etcd (and, on database VMs, PostgreSQL under Patroni) by itself,
+# whether the group is brand new or one lost machine is being replaced. Logic and reasons: cloud-init/files/db-ha-node.sh, docs/db-ha-patroni.md.
+# The passwords come from Terraform (sensitive variables, see scripts/db-ha-secrets.sh); this file is rendered into the VM's user data.
+write_files:
+  - path: /etc/db-ha/node.env
+    permissions: '0644'
+    content: |
+      ROLE=${role}
+      MEMBERS="${ha_members}"
+  - path: /etc/db-ha/secrets
+    permissions: '0600'
+    content: |
+      PG_PASSWORD="${ha_postgres_password}"
+      REPL_PASSWORD="${ha_replication_password}"
+      REST_PASSWORD="${ha_rest_password}"
+      NTFY_URL="${ha_ntfy_url}"
+  - path: /usr/local/sbin/db-ha-node
+    permissions: '0755'
+    content: |
+      ${indent(6, db_ha_node_script)}
+
+runcmd:
+  - /usr/local/sbin/db-ha-node

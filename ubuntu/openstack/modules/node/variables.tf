@@ -79,3 +79,9 @@ variable "environment" {
   description = "Environment label (prod, qa, ...). Stored as tag and metadata, never part of the VM name."
   type        = string
 }
+
+variable "private_ip" {
+  description = "Fixed address on the private subnet (null = Neutron chooses). Required for the database group, whose members are listed by address."
+  type        = string
+  default     = null
+}

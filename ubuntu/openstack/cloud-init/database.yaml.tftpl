@@ -1,5 +1,4 @@
 #cloud-config
-# Only used when a database VM is (re)built; adopted VMs keep their first-boot config.
-runcmd:
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql nfs-common
-  - systemctl enable --now postgresql
+# A database VM is built entirely by the db-ha part (etcd + PostgreSQL + Patroni), so a replaced VM joins the running pair and copies the leader
+# without any manual step. Nothing else is needed here. (The two VMs that existed before this was automated were adopted in place and keep their first-boot config.)
+write_files: []
