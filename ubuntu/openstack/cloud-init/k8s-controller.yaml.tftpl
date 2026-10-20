@@ -56,6 +56,10 @@ runcmd:
   # kubelet serving certs have no IP SANs on kubeadm clusters, so metrics-server needs this to scrape them
   - |
     su ubuntu -c "kubectl -n kube-system patch deployment metrics-server --type=json -p '[{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--kubelet-insecure-tls\"}]'"
+  # CoreDNS: three replicas spread over different nodes. By default both replicas can land on the same (first control plane) node, and when that node was
+  # powered off and back the pods stayed Unknown: cluster DNS was down although two other control planes were healthy (found in the prod HA drill).
+  - |
+    su ubuntu -c "kubectl -n kube-system patch deployment coredns --patch '{\"spec\":{\"replicas\":3,\"template\":{\"spec\":{\"topologySpreadConstraints\":[{\"maxSkew\":1,\"topologyKey\":\"kubernetes.io/hostname\",\"whenUnsatisfiable\":\"ScheduleAnyway\",\"labelSelector\":{\"matchLabels\":{\"k8s-app\":\"kube-dns\"}}}]}}}}'"
   # publish join command for workers
   - /usr/local/sbin/k8s-publish-join
   - systemctl daemon-reload && systemctl enable --now etcd-snapshot.timer k8s-publish-join.timer
