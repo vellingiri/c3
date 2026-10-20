@@ -62,5 +62,3 @@ dns:
     "@":     { ip: 13.140.58.46 }
     www:     { ip: 13.140.58.46 }
     rdu:     { ip: 13.140.58.46 }
-    # qa.rdulinux.com is now the apex of its own zone (a record in the parent zone would be shadowed)
-    qa-apex: { name: "@", zone: qa.rdulinux.com., ip: 192.168.2.5 }

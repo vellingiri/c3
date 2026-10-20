@@ -53,7 +53,7 @@ openstack floating ip set --port $(openstack loadbalancer show finance-lb -c vip
   `openstack server list` return 500 (`KeyError` in `servers/detail`). Delete that instance by id.
 
 ## Cutover (done 2026-10-20) and rollback
-The load balancer now owns **192.168.2.5**, the finance front door (public entry, `qa.rdulinux.com`, `argo.rdulinux.com` all point there).
+The load balancer now owns **192.168.2.5**, the finance front door (public entry and `argo.rdulinux.com` all point there).
 It was done by swapping floating IPs, which is atomic in Neutron (151 probe requests, 0 failed; first answer from the load balancer 2 s later):
 ```bash
 openstack floating ip unset --port 192.168.2.119                              # free .119 from the LB
@@ -68,7 +68,7 @@ openstack floating ip unset --port 192.168.2.119
 openstack floating ip set --port <finance-lb vip_port_id> 192.168.2.119
 openstack floating ip set --port <haproxy VM port id> 192.168.2.5
 ```
-Not carried over from haproxy: its `qa.rdulinux.com` -> QA-cluster route (`qa.` now lands on the finance app by design).
+Not carried over from haproxy: its `qa.rdulinux.com` -> QA-cluster route (the `qa.rdulinux.com` apex record was removed on 2026-10-20; the `qa.rdulinux.com.` zone stays for the QA VMs).
 
 ## Old haproxy VM (retired 2026-10-20)
 Removed from `environments/prod/nodes.yaml`; `terraform apply` destroys the VM, its port and floating IP `.119`. The
