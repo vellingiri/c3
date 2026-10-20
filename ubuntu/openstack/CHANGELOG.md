@@ -19,11 +19,15 @@ Update this file in the same commit as any change, and list anything done **by h
 | the *original* prod worker `w1` (10.0.1.118) and the test VMs `web1`, `web2` | deleted; prod `w1` was re-created as a new VM |
 | ssh alias `qa` | removed; `ssh w1.prod` and `ssh w1.qa` both work |
 
-### Host `c3`: second reboot test, and the real cause of the load balancers not surviving a reboot
-- Autostart works (17 of 17 VMs running about 2 minutes after boot) and `failover_threshold` prevented the rebuild storm, **but both front doors stayed down**: the amphora image (Octavia 16.1.1) loses its VIP network after a clean stop and start, because its boot script pairs lines of `ip link` and breaks when `altname` lines appear. Reproduced on one amphora; a patched image is built but **not yet in use** (waiting for an image-ownership decision). Until then repair by hand after a reboot: `docs/c3-reboot.md`.
+### Host `c3`: a plain reboot now brings everything back, including both front doors (see `docs/amphora-reboot-fix.md`)
+- **Result:** two plain reboots of `c3` with all 17 VMs running and no manual step: VMs back by themselves in about 2 minutes, both front doors 200 about 3 minutes after `c3` answered ssh, the same three amphorae (no rebuilds), load balancers `ACTIVE`/`ONLINE`.
+- **Root causes found and fixed:** (1) the amphora image (Octavia 16.1.1) lost its VIP network after any clean shutdown: its boot script paired lines of `ip link` (breaks on `altname` lines) and raced udev's NIC rename; **patched image `Amphora-netns-fix-v2-20261020`** (the only one tagged `Amphora`; all three amphorae rebuilt from it); (2) OVN's router (`always_learn_from_arp_request=false`, no aging) kept a stale MAC for a rebuilt amphora: new **`ovn-vip-binding.timer`** watcher on `c3` (`scripts/ovn-vip-binding-reconciler.py`, every 30 s, no credentials needed); (3) Octavia's health manager rebuilt amphorae that were just waking up: **`heartbeat_timeout = 900`** (and `failover_threshold = 2`).
+- **Behaviour change:** a really dead amphora is now replaced automatically only after 15 minutes. **Known flaw left:** `openstack loadbalancer failover finance-lb` (two amphorae at once) fails about half the time with a Nova/Placement "no allocation candidates" error and needs a retry; cause not found.
+- Old images `90ce7754…` (original) and `c537e966…` (first, insufficient patch) are kept untagged as backups. The patch must be redone if the amphora image is ever replaced.
+- Also: the earlier autostart settings, `nmbd` fix and `ndots:2` (next entry) are unchanged.
 
 ### Host `c3`: VMs restart by themselves after a boot, plus two small fixes
-- **Autostart configured** (`docs/c3-reboot.md`): `resume_guests_state_on_host_boot = true` (Nova), clean parallel guest shutdown and no libvirt autostart (`/etc/default/libvirt-guests`), a systemd drop-in so `nova-compute` stops before the guests are shut down, and Octavia `failover_threshold = 2` so a reboot does not trigger a mass rebuild of amphorae. Proven on the spare VM `learn` (restarted in 24 s; a VM stopped on purpose stays off); **not yet proven through a real reboot with everything running**.
+- **Autostart configured** (`docs/c3-reboot.md`): `resume_guests_state_on_host_boot = true` (Nova), clean parallel guest shutdown and no libvirt autostart (`/etc/default/libvirt-guests`), a systemd drop-in so `nova-compute` stops before the guests are shut down, and Octavia `failover_threshold = 2` so a reboot does not trigger a mass rebuild of amphorae. Proven on the spare VM `learn` (restarted in 24 s; a VM stopped on purpose stays off); proven through two plain reboots (see the entry above).
 - **`nmbd` fixed:** Samba listened on `enp3s0`, which has no IP (it is a port of the bridge `br0`); now `br0`. **Name lookups on `c3` fixed:** `options ndots:2` so `nslookup w1.prod` works. Backups of every changed file: `*.bak-20261020`.
 
 ### Rehearsed: rebooting the cloud host `c3` (see `docs/c3-reboot.md`)
@@ -58,7 +62,7 @@ Update this file in the same commit as any change, and list anything done **by h
 - A load balancer VIP on the amphora management network (members all `ERROR`): the VIP must be on the private subnet.
 
 ### Known gaps
-No automatic database failover (proposal in `docs/db-auto-failover-plan.md`); single control plane per cluster; NFS on `repo` has no replica; the monitor runs on the runner (no alert if the runner is down); `argo-lb` has one amphora; `/health` does not test the database.
+No automatic database failover (proposal in `docs/db-auto-failover-plan.md`); single control plane per cluster; NFS on `repo` has no replica; the monitor runs on the runner (no alert if the runner is down); `argo-lb` has one amphora (and a dead amphora is replaced only after 15 minutes); rebuilding two amphorae at once is flaky; `/health` does not test the database.
 
 ---
 

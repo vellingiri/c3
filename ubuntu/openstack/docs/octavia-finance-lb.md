@@ -51,7 +51,8 @@ openstack floating ip set --port $(openstack loadbalancer show argo-lb -c vip_po
 DNS (`infra/infra.yaml`): `argo` -> 192.168.2.113 with PTR. Wait for each step to leave `PENDING_*` before the next.
 
 ## Pitfalls we hit (all fixed)
-- **Health manager and a host reboot.** Heartbeats are received by the health manager, so after it was off (or the host was rebooted) every amphora looks dead for the first seconds and it starts
+- **Host reboot, stale router entry, health manager**: all three are fixed, see `amphora-reboot-fix.md` (patched amphora image, `ovn-vip-binding` watcher, `heartbeat_timeout = 900`). Never run `openstack image set --tag` so that two images carry `Amphora`: Octavia silently takes the newest. A rebuilt amphora has a new MAC; if a front door is down while the load balancer is `ACTIVE`, check `journalctl -u ovn-vip-binding.service`.
+- **Health manager and a host reboot (history).** Heartbeats are received by the health manager, so after it was off (or the host was rebooted) every amphora looks dead for the first seconds and it starts
   failovers; with little free memory they can fail (`No valid host`, `ComputeWaitTimeoutException`) and leave a load balancer `ERROR`. Fix: `openstack loadbalancer failover <lb>` (retry on `409`).
   Details and the safe procedure: `c3-reboot.md`.
 - **VIP network must not be the amphora management network.** Putting the VIP on `external_network` (also `amp_boot_network_list`)

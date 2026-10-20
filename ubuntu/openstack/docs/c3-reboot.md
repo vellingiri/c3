@@ -20,6 +20,9 @@ Goal: after `c3` boots, the VMs that were running come back by themselves. Four 
 | 2 | `/etc/default/libvirt-guests` | `ON_BOOT=ignore`, `ON_SHUTDOWN=shutdown`, `SHUTDOWN_TIMEOUT=300`, `PARALLEL_SHUTDOWN=20` | at host shutdown the guests get a clean ACPI shutdown, all in parallel (the default saves their memory to disk one by one); at boot libvirt starts nothing and leaves it to Nova, so the two never fight |
 | 3 | `/etc/systemd/system/nova-compute.service.d/10-order-after-libvirt-guests.conf` | `After=libvirt-guests.service` | systemd stops units in the reverse of start order, so `nova-compute` now stops **before** `libvirt-guests` shuts the guests down. Otherwise Nova could see a shut-down guest, record it as `SHUTOFF`, and never restart it |
 | 4 | `/etc/octavia/octavia.conf`, `[health_manager]` | `failover_threshold = 2` | after a reboot every amphora looks dead for a moment, and the health manager used to rebuild them (what broke the load balancers in the first test). With this setting, if 2 or more amphorae are stale at the same time they are marked `FAILOVER_STOPPED` and **no failover happens**; they go back to normal when heartbeats resume. A single dead amphora is still replaced automatically |
+| 5 | same section | `heartbeat_timeout = 900` | **the setting that finally made reboots safe**: an amphora must be silent for 15 minutes (longer than a host reboot) before Octavia considers it dead. The threshold alone is not enough: if one amphora wakes a little after the others only one is stale and it would still be rebuilt |
+| 6 | Glance image tagged `Amphora` | the patched image `Amphora-netns-fix-v2-20261020` | fixes the amphora's VIP network after a clean stop/start (`amphora-reboot-fix.md`) |
+| 7 | `ovn-vip-binding.timer` on `c3` | a 30-second watcher | makes OVN's router follow the amphora that really answers the VIP (`amphora-reboot-fix.md`) |
 
 Apply (what was done), on `c3` as root:
 ```bash
@@ -39,13 +42,11 @@ systemctl show nova-compute -p After | tr ' ' '\n' | grep libvirt-guests
 ```
 Undo: restore the `.bak-20261020` files, delete the drop-in, `systemctl daemon-reload`, restart the three services.
 
-**Proven on the spare VM `learn`, without rebooting the host:** (a) `nova-compute` stopped, the guest shut down behind Nova's back, `nova-compute` started: the guest was running again after **24 s** and `ssh learn.qa` worked;
-(b) a VM stopped on purpose through Nova stayed `SHUTOFF` after a `nova-compute` restart. **Not yet proven end to end:** a real host reboot with everything running (the clean shutdown of all guests, the stop order, and the Octavia threshold during the stale-heartbeat window).
-Until that has been done, treat the next reboot as a test and keep the procedure below as the fallback.
+**Proven:** (a) on the spare VM `learn` without rebooting the host: `nova-compute` stopped, the guest shut down behind Nova's back, `nova-compute` started: the guest was running again after **24 s**; a VM stopped on purpose through Nova stayed `SHUTOFF`; (b) **two plain reboots of `c3` with everything running**: 17 of 17 VMs back by themselves in about 2 minutes (details below and in `amphora-reboot-fix.md`).
 
 Limits to know:
 - All VMs start at once, with no database-first ordering. The apps and Postgres replication retry and caught up in the first test, but check after a reboot.
-- The threshold also means that if **two** amphorae die at the same time, Octavia will not repair them by itself: look at `openstack loadbalancer amphora list` and run `openstack loadbalancer failover <lb>` by hand.
+- A really dead amphora is replaced automatically only after **15 minutes** (`heartbeat_timeout`), and if **two** die at the same time Octavia will not repair them by itself: look at `openstack loadbalancer amphora list` and run `openstack loadbalancer failover <lb>` by hand (retry on a 409; see `amphora-reboot-fix.md` for the flaky two-amphora rebuild).
 
 ## Other fixes made on `c3` the same day
 - **`nmbd` failed on every boot.** `/etc/samba/smb.conf` had `interfaces = 127.0.0.0/8 enp3s0`, but `enp3s0` has no IP address (it is a port inside the bridge `br0`, which carries `192.168.2.2`), so nmbd logged "No local IPv4 non-loopback interfaces available, waiting for interface", never reported ready, and systemd timed it out.
@@ -55,46 +56,17 @@ Limits to know:
   What it means: a name with fewer than 2 dots is tried with the search suffixes first; names with 2 or more dots (`repo.rdulinux.com`) are tried as typed. Side effect: a one-dot external name such as `github.com` first tries the three suffixes (a few milliseconds, then resolves normally).
   Backup `resolv.conf.bak-20261020`. `/etc/resolv.conf` is a plain file here (no resolvconf, no systemd-resolved), so the edit persists.
 
-## Second reboot test: autostart worked, the load balancers did not come back (2026-10-20)
-A plain `reboot` of `c3` with all 17 VMs running (no manual shutdown), after the autostart settings above. Results:
-| Check | Result |
-|---|---|
-| Clean guest shutdown at host shutdown | worked, but it takes time: `c3` was back after **570 s** this time (150 s the first time, when the VMs were already off) |
-| VMs started by themselves | **yes: 17 of 17 running about 2 minutes after boot** |
-| Route, `nmbd`, failed units, `nslookup w1.prod` on `c3` | route present; `nmbd` active; 0 failed units; short names resolve |
-| Octavia mass rebuild | **prevented** by `failover_threshold = 2`: the log shows "Stale amphora count reached the threshold (2). 3 amphorae were set into FAILOVER_STOPPED" and no failover ran |
-| Databases, prod and QA clusters, Argo, runner, monitor | all healthy within minutes, no action needed |
-| **Both front doors (finance, Argo)** | **down, and they did not recover by themselves** (see below). Repaired by hand |
-
-### Root cause: the amphora image loses its VIP network after a clean stop and start
-- After the host boot every amphora VM was running and its agent answered, but the agent reported `"networks": {}`: the VIP NIC (`eth1`) was not in the amphora's network namespace, so nothing could answer on the VIP.
-- **Reproduced on one amphora without rebooting the host:** a *hard* reboot of the Argo amphora kept its VIP; a *clean* `openstack server stop` then `start` lost it (`networks=[]`, VIP down). Its saved data on disk (`/var/lib/octavia/plugged_interfaces`, `/etc/octavia/interfaces/eth1.json`) was intact.
-- **Why:** at every boot, `amphora-netns.service` (written by the agent from the template `amphora-netns.systemd.j2` in the image) moves the VIP NIC into the namespace. It finds the NIC by running `ip link | awk '{getline n; print $0,n}' ...`, which **pairs each line of `ip link` with the next**. That only works if every interface prints exactly two lines. When the kernel gives a NIC an `altname` line (it does for the slot-named NICs a cold start produces, `ens3`/`ens4`), the pairing slips and the VIP NIC's MAC is turned into garbage, so it is never matched or moved. A hard reboot keeps the old hot-plug naming (`ens7`), which is why it worked.
-  Checked on `c3`'s own interfaces: the old command returns garbage for almost every interface; `ip -o link` (one line per interface) returns exactly the right MAC and name for all of them.
-- This is a bug in the amphora image (Octavia 16.1.1 in the `Amphora` image built 2026-10-02), not in our settings and not in Nova. Any clean shutdown of an amphora, including the clean guest shutdown now done at host shutdown, triggers it.
-
-### Permanent fix: patched amphora image (in progress)
-1. Done: copied the image (`/root/amphora-fix/`, hash matched Glance), changed that one command in `/opt/amphora-agent-venv/.../templates/amphora-netns.systemd.j2` from `/sbin/ip link | awk '{getline n; print $0,n}' |` to `/sbin/ip -o link |`, verified the image (`qemu-img check`), uploaded it as `Amphora-netns-fix-20261020` (id `c537e966-d3f9-498f-a33c-42d246e3ef88`) with the tag `Amphora` that Octavia selects by.
-2. **Blocked on one decision:** the new image is owned by the admin project, but the original was owned by Octavia's project (`9197db57…`) and is private, so Octavia may not be able to see the new one. Until its ownership (or visibility) is fixed, Octavia keeps using the **original** image, which I re-tagged `Amphora` as a fallback.
-3. To do after that: rebuild the amphorae from the new image one load balancer at a time (`openstack loadbalancer failover argo-lb`, then `finance-lb`), then **prove it**: a clean `openstack server stop` and `start` of each amphora must come back with its VIP (`networks` not empty, VIP answering), and finally a real host reboot.
-4. Then remove the old image's tag (keep the image as a backup) so only the fixed one can be selected.
-Check on any amphora: `curl --cert /etc/octavia/certs/private/client.cert-and-key.pem --cacert /etc/octavia/certs/server_ca-chain.cert.pem -k https://<amphora lb_network_ip>:9443/1.0/details` and look at `networks`.
-Until step 3 is done, **a host reboot leaves both front doors down until the repair below is run.**
-
-### Repair after a reboot (manual, until the image is replaced)
-1. Wait for all VMs to be up (about 2 minutes) and the amphorae `ALLOCATED`/`FAILOVER_STOPPED`.
-2. `openstack loadbalancer failover argo-lb`, wait for `ACTIVE`/`ONLINE` (about 40 s), then `openstack loadbalancer failover finance-lb` (about 1 minute). A `409 immutable` means Octavia is busy: retry every 15 s. If one amphora stays in `ERROR` afterwards, `openstack loadbalancer amphora failover <id>` rebuilds just that one.
-3. Check Argo: **a rebuilt standalone amphora can leave the OVN router pointing at the wrong MAC for its VIP** (`argo.rdulinux.com` answers nothing although the load balancer is `ACTIVE`/`ONLINE`). The router resolves the VIP to the *unbound VIP port's* MAC unless the amphora announces itself with a gratuitous ARP, which a standalone amphora does only once, at plug time. Fix: find the row and point it at the amphora's VRRP port MAC:
-   ```bash
-   ovn-sbctl --columns=_uuid,mac find MAC_Binding ip=10.0.1.56                  # the Argo VIP
-   openstack port list -c Name -c "MAC Address" -c "Fixed IP Addresses" -f value | grep vrrp   # MAC of the NEW amphora's vrrp port
-   ovn-sbctl set MAC_Binding <uuid> mac='"fa:16:3e:xx:xx:xx"'                    # the quotes inside the quotes matter
-   ```
-   `finance-lb` (active/standby) does not need this: keepalived announces the VIP on every takeover. Making `argo-lb` active/standby would remove the problem for good, at the cost of one more 2 GB amphora (memory is tight, see `ARCHITECTURE.md`).
-4. Run the verification sweep from the "Verify" section.
-
-### How this was diagnosed (reusable)
-Read an amphora's disk without stopping it: `LIBGUESTFS_BACKEND=direct virt-cat --format=qcow2 -a /var/lib/nova/instances/<server id>/disk <path>` (the `--format` avoids a lock error), and `guestmount -a <image> -i --ro <dir>` on a copy of the image. The amphora console log (`openstack console log show <server id>`) shows the NIC renames and whether `amphora-netns` ran.
+## Reboot test results (2026-10-20): where it ended
+Four reboot tests of `c3` were done in one day. The last two were **plain `reboot`s with all 17 VMs running and no manual step**, and passed:
+| | Test 1 (VMs shut down by hand first) | Test 2 (plain reboot, autostart on) | Test 3 and 4 (plain reboot, all fixes) |
+|---|---|---|---|
+| `c3` back (ssh) | 150 s | 570 s (clean guest shutdown now happens first) | 309 s and **172 s** |
+| VMs running | started by hand | 17 of 17 by themselves in about 2 min | 17 of 17 by themselves in about 2 min |
+| Both front doors | down until repaired by hand (about 45 min) | **down and did not recover** | **200 about 3 minutes after `c3` answered, nothing touched** |
+| Octavia | rebuilt amphorae, some failed | mass rebuild prevented by the threshold, but the amphorae had lost their VIP network | **0 failovers, same amphora IDs, all `ALLOCATED`, load balancers `ACTIVE`/`ONLINE`** |
+| `nmbd`, route, short names on `c3` | `nmbd` failing | fixed | `nmbd` active, 0 failed units, route present, `w1.prod` resolves |
+The cause of tests 1 and 2 failing was **not** the host or Nova but the amphora image (it loses its VIP network after a clean shutdown), an OVN router that keeps a stale MAC for a rebuilt amphora, and the health manager rebuilding amphorae that were merely not yet awake. All three are fixed: see **`amphora-reboot-fix.md`** for the root cause, the fixes (patched image, `heartbeat_timeout`, the `ovn-vip-binding` watcher), the proof and how to re-create the patch.
+The databases, both clusters, Argo, the runner and the monitor came back by themselves every time (replication resumed at 0 lag).
 
 ## Procedure (manual: the fallback, and the checks that still apply)
 With automatic start configured (above) the manual shutdown and start steps can be skipped, but not the checks before and after. Allow about an hour including checks (the test took longer, because of the Octavia repairs below). The finance app is down from the first shutdown until the pods and a load balancer are back, and Argo CD may be down longer (see "What went wrong").
@@ -130,7 +102,8 @@ With automatic start configured (above) the manual shutdown and start steps can 
 `finance.rdulinux.com/health` and `argo.rdulinux.com` return 200; DNS names resolve; 6 of 6 prod and 4 of 4 QA nodes `Ready`; each app has three pods on three different nodes; Argo `Synced Healthy`; the app's own database check
 (`select inet_server_addr(), pg_is_in_recovery()` as the app user) returns `10.0.1.191 | f`; replication streaming; runner and `db-monitor.timer` active; both pools 5 of 5 `ONLINE`; load balancers `ACTIVE`/`ONLINE`.
 
-## What went wrong, and the repair
+## History: what went wrong in test 1, and the manual repair (superseded, kept as the fallback)
+This is how the first test went and how it was repaired by hand. The root causes were found later and are fixed: `amphora-reboot-fix.md`.
 **Octavia rebuilt amphorae when its health manager started (step 13), and some of the rebuilds failed.**
 - The health manager judges an amphora dead when its last heartbeat is older than 60 s. The heartbeats are received by the health manager itself, so while it was off the stored timestamps went stale. When it started (11:15) it saw every amphora as dead
   before the first new heartbeat could arrive, and started failovers.
@@ -141,13 +114,12 @@ With automatic start configured (above) the manual shutdown and start steps can 
   Octavia deleted the replaced amphora VMs itself; check `openstack server list --all-projects | grep amphora` shows exactly three, and `openstack loadbalancer amphora list` shows `ALLOCATED` for all.
 - **Capacity matters:** an amphora is a 2 GB VM and a rebuild creates the new one before deleting the old. With little memory free two simultaneous rebuilds can fail with `No valid host`.
 
-### Ideas to avoid it next time (not tried yet)
-- Before step 13 temporarily raise `[health_manager] heartbeat_timeout` (for example to 300) in `/etc/octavia/octavia.conf`, start the health manager, wait a couple of minutes for heartbeats to refresh the timestamps, then put the value back and restart it
-  (remember: after any `octavia.conf` change restart **both** `octavia-worker` and `octavia-health-manager`).
-- Set `resume_guests_state_on_host_boot = true` in `/etc/nova/nova.conf` so Nova starts the VMs that were running; the ordering above (databases and control planes first) would then no longer be under your control, so test it before relying on it.
-- Free at least 4 GB of memory first (retire an unused VM) so Octavia's rebuilds cannot hit `No valid host`.
+### Ideas listed after test 1: what became of them
+- Raise the health manager's tolerance: **done**, as `heartbeat_timeout = 900` (plus `failover_threshold = 2`); this is what finally made reboots safe.
+- `resume_guests_state_on_host_boot = true`: **done** (see "Automatic VM start").
+- Free at least 4 GB of memory before rebuilding load balancers: still a good idea (see `amphora-reboot-fix.md`, limits).
 
-## Measured in the test
+## Measured in test 1 (VMs shut down by hand first)
 | | |
 |---|---|
 | Graceful stop of all 17 VMs | not timed (a few minutes; every VM reached `SHUTOFF` before the reboot) |
@@ -161,4 +133,4 @@ With automatic start configured (above) the manual shutdown and start steps can 
 | Terraform | untouched; nothing needed to be re-applied |
 
 ## Related
-`ARCHITECTURE.md` (what runs where), `octavia-finance-lb.md` (load balancer pitfalls), `c3-host-route.md`, `db-replication.md`, `k8s-operations.md`.
+`amphora-reboot-fix.md` (why load balancers broke after a reboot and the fix), `ARCHITECTURE.md` (what runs where), `octavia-finance-lb.md` (load balancer pitfalls), `c3-host-route.md`, `db-replication.md`, `k8s-operations.md`.

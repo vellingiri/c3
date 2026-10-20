@@ -51,6 +51,7 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 | DNS | `for n in finance argo db db1 db2; do echo $n $(dig +short $n.rdulinux.com @192.168.2.2); done` | `.5`, `.113`, `.124`, `.124`, `.135` |
 | Finance front door | `curl -s -o /dev/null -w '%{http_code}\n' http://finance.rdulinux.com/health` | 200 (**does not test the database**) |
 | Argo | `curl -s -o /dev/null -w '%{http_code}\n' http://argo.rdulinux.com/` | 200 |
+| OVN VIP watcher | `ssh c3 'systemctl is-active ovn-vip-binding.timer; openstack loadbalancer amphora list'` | `active`; all amphorae `ALLOCATED` |
 | Load balancers | `ssh c3 'openstack loadbalancer list; openstack loadbalancer member list finance-pool; openstack loadbalancer member list argo-backend'` | `ACTIVE`/`ONLINE`, 4 members `ONLINE` each |
 | Kubernetes | `kubectl --kubeconfig ~/.kube/prod get nodes` and `k get pods -o wide` and `k get pdb` | 6 nodes Ready (c1 + w1 to w5); 3 of backend, frontend, docs, nginx, each on a different node |
 | Argo app | `kubectl --kubeconfig ~/.kube/prod -n argocd get application finance-qa` | Synced, Healthy |
@@ -91,7 +92,8 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 | Database primary lost, or replication alert | `db-replication.md` |
 | `finance.rdulinux.com` or `argo.rdulinux.com` down | `octavia-finance-lb.md`, then `k8s-operations.md` |
 | Adding or retiring a worker, drain stuck, rollout stuck | `k8s-operations.md` |
-| `c3` rebooted or must be rebooted (VMs stay off, Octavia may rebuild amphorae) | `c3-reboot.md` |
+| `c3` rebooted or must be rebooted | `c3-reboot.md` (VMs and load balancers now come back by themselves) |
+| a front door is down but the load balancer says `ACTIVE`/`ONLINE`, or an amphora is `ERROR` | `amphora-reboot-fix.md` |
 | Control plane lost, whole cluster rebuild | `prod-k8s-rebuild.md`, `etcd-restore-rehearsal.md` |
 | Need to restore data | `finance-db-restore.md` |
 | `409 Port in use`, `NoValidHost`, `FloatingIPNotFound` | `../README.md` (Troubleshooting) and `octavia-finance-lb.md` (Pitfalls) |

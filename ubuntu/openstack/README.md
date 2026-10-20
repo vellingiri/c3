@@ -38,6 +38,7 @@ Roles (`role:` in `nodes.yaml`, one cloud-init composition each in `modules/node
 | `install-ingress-nginx.sh` | install ingress-nginx (NodePort 30080) on a cluster |
 | `db-replica-setup.sh`, `db-replication-status.sh` | build and check the PostgreSQL replica (`docs/db-replication.md`) |
 | `install-db-monitor.sh`, `db-replication-monitor.sh` | replication alerts on the runner |
+| `ovn-vip-binding-reconciler.py`, `install-ovn-vip-reconciler.sh` | the 30-second watcher on `c3` that keeps OVN's router entry for each Octavia VIP pointing at the amphora that answers (`docs/amphora-reboot-fix.md`) |
 | `openstack-shortcuts.sh` | `openstack server list` with an `Env` column (source it in your shell) |
 
 ## Rules the design enforces

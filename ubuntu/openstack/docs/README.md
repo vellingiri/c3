@@ -16,6 +16,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | rebuild a whole Kubernetes cluster | [prod-k8s-rebuild.md](prod-k8s-rebuild.md), [etcd-restore-rehearsal.md](etcd-restore-rehearsal.md) |
 | understand why Terraform looks the way it does, or adopt a VM | [terraform-v2-migration.md](terraform-v2-migration.md), [../README.md](../README.md) |
 | reboot `c3` (or recover after it rebooted); how VMs restart by themselves, the nmbd and name-lookup fixes | [c3-reboot.md](c3-reboot.md) |
+| understand why load balancers broke after a host reboot and how it was fixed (patched amphora image, health-manager setting, OVN watcher) | [amphora-reboot-fix.md](amphora-reboot-fix.md) |
 | understand or undo the route that lets `c3` reach private VM addresses | [c3-host-route.md](c3-host-route.md) |
 | decide about automatic database failover | [db-auto-failover-plan.md](db-auto-failover-plan.md) (proposal, nothing built) |
 
@@ -33,7 +34,8 @@ All documents were checked against the live system on 2026-10-20; each says what
 | etcd-restore-rehearsal.md | runbook + proof | rehearsed 2026-10-19 on QA |
 | terraform-v2-migration.md | design record | complete |
 | c3-host-route.md | change record + undo | current; boot-tested 2026-10-20 |
-| c3-reboot.md | runbook + test record | rehearsed 2026-10-20 on live prod |
+| c3-reboot.md | runbook + test record | four reboot tests on 2026-10-20; the last two hands-off and passing |
+| amphora-reboot-fix.md | root cause + fix + proof | current; the image patch must be redone if the amphora image is replaced |
 
 ## Keeping this true
 - A change that touches addresses, names, load balancer members, the database layout or a procedure updates the matching doc **and** `../CHANGELOG.md` in the same commit.
