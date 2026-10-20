@@ -15,6 +15,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | restore data from a backup | [finance-db-restore.md](finance-db-restore.md) |
 | rebuild a whole Kubernetes cluster | [prod-k8s-rebuild.md](prod-k8s-rebuild.md), [etcd-restore-rehearsal.md](etcd-restore-rehearsal.md) |
 | understand why Terraform looks the way it does, or adopt a VM | [terraform-v2-migration.md](terraform-v2-migration.md), [../README.md](../README.md) |
+| reboot `c3` (or recover after it rebooted): VMs do not restart by themselves | [c3-reboot.md](c3-reboot.md) |
 | understand or undo the route that lets `c3` reach private VM addresses | [c3-host-route.md](c3-host-route.md) |
 | decide about automatic database failover | [db-auto-failover-plan.md](db-auto-failover-plan.md) (proposal, nothing built) |
 
@@ -31,7 +32,8 @@ All documents were checked against the live system on 2026-10-20; each says what
 | prod-k8s-rebuild.md | runbook + execution log | procedure executed 2026-10-19 with haproxy; the Octavia adaptation at the top is **not rehearsed** |
 | etcd-restore-rehearsal.md | runbook + proof | rehearsed 2026-10-19 on QA |
 | terraform-v2-migration.md | design record | complete |
-| c3-host-route.md | change record + undo | current; the permanent version is not yet boot-tested |
+| c3-host-route.md | change record + undo | current; boot-tested 2026-10-20 |
+| c3-reboot.md | runbook + test record | rehearsed 2026-10-20 on live prod |
 
 ## Keeping this true
 - A change that touches addresses, names, load balancer members, the database layout or a procedure updates the matching doc **and** `../CHANGELOG.md` in the same commit.

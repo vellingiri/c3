@@ -4,7 +4,7 @@ Verified against the live system on **2026-10-20**. If you change something big,
 (and add a line to `../CHANGELOG.md`).
 
 ## The one-paragraph version
-A single physical host, **`c3`**, runs OpenStack (Kolla, Debian). On it live two Kubernetes clusters (**prod** and **qa**), two PostgreSQL VMs
+A single physical host, **`c3`**, runs OpenStack (Debian 13 packages as systemd services; no Kolla, no Docker). On it live two Kubernetes clusters (**prod** and **qa**), two PostgreSQL VMs
 (a primary and a streaming replica), a GitHub Actions runner, and two Octavia load balancers. The finance app runs in the **prod** cluster, is deployed by
 Argo CD from the `develop` branch of the finance repo, and is reached through the load balancer `finance-lb`. VMs are created from `nodes.yaml` files with Terraform;
 load balancers, Kubernetes objects and the monitor are not (see "What Terraform does not manage").
@@ -25,7 +25,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 ### Shared services (zone `rdulinux.com`)
 | Name | Floating IP | Private IP | What |
 |---|---|---|---|
-| `c3` | 192.168.2.2 | n/a | the cloud host: OpenStack (Kolla) and the DNS server (Designate) |
+| `c3` | 192.168.2.2 | n/a | the cloud host: OpenStack (Debian packages) and the DNS server (Designate). **Rebooting it takes everything down and Nova does not restart the VMs: `c3-reboot.md`** |
 | `repo` | 192.168.2.3 | n/a | NFS server: VM images, finance logs, uploads and backups (`/exports/finance-qa/...`); VMs mount a share at `/nfsshare` (join files, etcd snapshots) |
 | `backup` | 192.168.2.4 | n/a | backup host (off-host copies, e.g. `/backup/finance-qa/pre-rebuild-20261019/`) |
 | `finance` | 192.168.2.5 | VIP 10.0.1.89 | the finance app, served by Octavia `finance-lb` |

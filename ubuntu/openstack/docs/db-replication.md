@@ -175,6 +175,10 @@ With `DATABASE_URL=postgresql://user:pass@10.0.1.191:5432,10.0.1.69:5432/finance
 edit and no backend restart (the pool reconnects). Not adopted yet: it changes the production secret and has not been tested through an actual failover.
 See `db-auto-failover-plan.md`.
 
+## Host reboot (2026-10-20)
+Both database VMs were stopped cleanly (replica first, then primary) before `c3` was rebooted, and started again primary first. Replication resumed on its own
+(`streaming, behind: 0 bytes`), the app's database check passed and the monitor reported healthy. No action was needed on the database side. Procedure: `c3-reboot.md`.
+
 ## Troubleshooting
 - **Replica not streaming:** `ssh db2 'journalctl -u postgresql@16-main -n 50 --no-pager'`. Typical causes: wrong or rotated password
   (re-run the setup script), the `replication` rule missing on the primary, the slot dropped, or WAL already removed (rebuild).

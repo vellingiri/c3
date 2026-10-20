@@ -59,8 +59,7 @@ Nothing else depends on the route: the cloud, the app and the load balancers do 
 - **The router's external address changes.** `192.168.2.174` was allocated by Neutron when the router's gateway was set. If the gateway is cleared and set again it may get another address, and the route
   then points at nothing (private addresses time out again). Fix: read the new address (`openstack router show main_router -c external_gateway_info`) and update the route at runtime
   and in `/etc/network/interfaces`. A fixed address can be requested when the gateway is set, if you want it to stay the same.
-- **Not tested at boot.** `c3` was not rebooted for this change, so the permanent version has only been checked by reading it back (`ifquery`), not by a real boot. At boot the router may not be
-  up yet when the route is added; that is fine for the route (only the next hop's subnet must exist), but the private addresses answer only after the router is up.
+- **Boot-tested (2026-10-20).** `c3` was rebooted afterwards (`c3-reboot.md`) and the route was present by itself, so the `up` line works at boot. (At boot the router may not be up yet when the route is added; that is fine, only the next hop's subnet must exist, but private addresses answer only once the router is up.)
 - **It is a change to the host, not to Terraform.** It is listed in `ARCHITECTURE.md` under "What Terraform does not manage" and in `../CHANGELOG.md`. If `c3` is ever reinstalled, add the route again.
 - **Not for other machines.** Only `c3` has the route. Your Mac (`192.168.1.x`) is on another subnet and cannot reach `10.0.1.x` or the worker NodePorts. Giving it that would need a route on the Mac
   (or on the LAN gateway) toward `192.168.2.174`, and the LAN gateway forwarding between the two subnets; that was not tried.

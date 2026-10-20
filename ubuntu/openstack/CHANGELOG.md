@@ -19,6 +19,10 @@ Update this file in the same commit as any change, and list anything done **by h
 | the *original* prod worker `w1` (10.0.1.118) and the test VMs `web1`, `web2` | deleted; prod `w1` was re-created as a new VM |
 | ssh alias `qa` | removed; `ssh w1.prod` and `ssh w1.qa` both work |
 
+### Rehearsed: rebooting the cloud host `c3` (see `docs/c3-reboot.md`)
+- All 17 VMs were shut down gracefully, `c3` was rebooted (back in 150 s), the persistent route came up by itself, and everything was started again in order. The prod and QA clusters, both databases (replication resumed on its own) and the app came back with no data loss.
+- **Findings:** Nova does not restart VMs after a host boot; Octavia's health manager rebuilt amphorae right after it started and some rebuilds failed, so both load balancers needed a manual `openstack loadbalancer failover` (about 100 s each); `nmbd` fails on every boot (unrelated). OpenStack on `c3` is Debian packages, not Kolla (docs corrected).
+
 ### Added
 - **Octavia load balancers** (built by hand, doc: `docs/octavia-finance-lb.md`): `finance-lb` (active/standby, two amphorae, flavor `ha`) at 192.168.2.5 for the finance app, `argo-lb` (one amphora) at 192.168.2.113 for Argo CD. Health-checked, round robin over the prod workers. Failover tested: 485 requests, 0 failed while the active amphora was powered off.
 - **Workers `w4` and `w5`** in prod; the original `w1` was drained and retired with 0 failed requests, then **a fresh `w1` was added the same day** (private 10.0.1.67, floating 192.168.2.52), so prod is `c1` plus **`w1` to `w5`**. All five are members of both load balancer pools. The four apps were then rolled one at a time so `w1` runs a pod of each (186 requests during the rollouts, 0 failed).

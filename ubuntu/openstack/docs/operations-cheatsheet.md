@@ -87,6 +87,7 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 | Database primary lost, or replication alert | `db-replication.md` |
 | `finance.rdulinux.com` or `argo.rdulinux.com` down | `octavia-finance-lb.md`, then `k8s-operations.md` |
 | Adding or retiring a worker, drain stuck, rollout stuck | `k8s-operations.md` |
+| `c3` rebooted or must be rebooted (VMs stay off, Octavia may rebuild amphorae) | `c3-reboot.md` |
 | Control plane lost, whole cluster rebuild | `prod-k8s-rebuild.md`, `etcd-restore-rehearsal.md` |
 | Need to restore data | `finance-db-restore.md` |
 | `409 Port in use`, `NoValidHost`, `FloatingIPNotFound` | `../README.md` (Troubleshooting) and `octavia-finance-lb.md` (Pitfalls) |
