@@ -4,15 +4,18 @@ Backups: the `db-backup-hourly` / `db-backup-daily` CronJobs (finance namespace)
 `finance-*.sql.gz` (plain SQL) to the NFS share `repo:/exports/finance-qa/backups/finance/{hourly,daily,weekly,manual}`
 (24 hourly, 7 daily, 4 weekly kept). The database itself runs on the shared `db` VM (PostgreSQL 16).
 
-## Known issue: dumps need one line removed to restore on the 16 server
-The backup job's `pg_dump` is PostgreSQL 17, which writes `SET transaction_timeout = 0;`. The `db` server is 16.15 and
-rejects it (`unrecognized configuration parameter "transaction_timeout"`), so a plain `psql -v ON_ERROR_STOP=1` restore
-stops on line 13. Strip that line when restoring:
+## Fixed: dumps now restore with plain psql (2026-10-20)
+The backup job used to run a PostgreSQL 17 `pg_dump` against the 16 server, so every dump contained
+`SET transaction_timeout = 0;` and a plain `psql -v ON_ERROR_STOP=1` restore stopped on line 13. The backend image now
+installs the 16 client (`ARG PG_CLIENT_MAJOR=16` in the finance repo's `app/backend/Dockerfile`), so dumps are written by
+`pg_dump` 16.15 and have no such line. Verified on the 03:30 IST dump of 2026-10-20: plain restore, exit 0, 85/85 tables,
+114,669 rows identical to the live database.
+
+**Older dumps** (written before 2026-10-20 ~01:00 IST, header `Dumped by pg_dump version 17.x`) still need the line removed:
 ```bash
 zcat dump.sql.gz | sed '/^SET transaction_timeout/d' | psql -v ON_ERROR_STOP=1 -d <target-db>
 ```
-Permanent fix (in the finance repo, not here): build the backup image with `postgresql-client-16`
-(or upgrade the server to 17).
+Keep `PG_CLIENT_MAJOR` equal to the server's major version; change them together.
 
 ## Verified restore test (2026-10-19)
 Fresh dump `finance-20261019_170719.sql.gz` (939 KB) restored into a scratch database on `db`:

@@ -1,18 +1,24 @@
 locals {
+  # security groups infra exports by name, for nodes.yaml entries written as "@name"
+  sg_by_name = try(data.terraform_remote_state.infra.outputs.security_group_ids, {})
+
   cfg      = yamldecode(file("${path.module}/${var.nodes_file}"))
   defaults = local.cfg.defaults
 
   # Merge defaults into every node; per-node `vars` override default vars.
   nodes = {
     for name, n in local.cfg.nodes : name => {
-      role               = n.role
-      flavor             = n.flavor
-      image              = try(n.image, local.defaults.image)
-      keypair            = try(n.keypair, local.defaults.keypair)
-      security_group_ids = try(n.security_group_ids, local.defaults.security_group_ids)
-      domain             = try(n.domain, local.defaults.domain)
-      manage_dns         = try(n.manage_dns, true)
-      vars               = merge(local.defaults.vars, try(n.vars, {}))
+      role    = n.role
+      flavor  = n.flavor
+      image   = try(n.image, local.defaults.image)
+      keypair = try(n.keypair, local.defaults.keypair)
+      security_group_ids = [
+        for g in try(n.security_group_ids, local.defaults.security_group_ids) :
+        startswith(g, "@") ? local.sg_by_name[trimprefix(g, "@")] : g
+      ]
+      domain     = try(n.domain, local.defaults.domain)
+      manage_dns = try(n.manage_dns, true)
+      vars       = merge(local.defaults.vars, try(n.vars, {}))
     }
   }
 }

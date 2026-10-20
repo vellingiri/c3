@@ -35,3 +35,10 @@ output "dns_reverse_zone_id" {
 output "reverse_zone_name" {
   value = module.dns.reverse_zone_name
 }
+
+# Security groups by name; nodes.yaml refers to them as "@name" (e.g. "@k8s").
+output "security_group_ids" {
+  value = {
+    k8s = module.security.security_group_id
+  }
+}
