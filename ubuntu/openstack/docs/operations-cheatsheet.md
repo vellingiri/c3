@@ -78,6 +78,9 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 | Alert channel (ntfy topic) | `/etc/default/db-monitor` on the runner: anyone who knows the topic can read or post to it |
 | GitHub runner registration | on the runner VM (`github-runner.service`) |
 
+## OpenStack traps
+- A `SHUTOFF` server still reserves its RAM in Nova (only deleting frees it). Fixed IP for a server: make a port with the IP and use `--port`. Replacing a VM: `docs/port-unbind-fix.md`.
+
 ## macOS and zsh traps (each one cost time once)
 - A variable that holds a command (`K="kubectl ..."; $K get pods`) does not split in zsh: use a function.
 - `sed -i` needs an empty suffix on macOS: `sed -i '' ...`.

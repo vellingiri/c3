@@ -19,6 +19,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | reboot `c3` (or recover after it rebooted); how VMs restart by themselves, the nmbd and name-lookup fixes | [c3-reboot.md](c3-reboot.md) |
 | understand why load balancers broke after a host reboot and how it was fixed (patched amphora image, health-manager setting, OVN watcher) | [amphora-reboot-fix.md](amphora-reboot-fix.md) |
 | understand or undo the route that lets `c3` reach private VM addresses | [c3-host-route.md](c3-host-route.md) |
+| a VM replace failed with "Port ... is still in use" (Neutron policy fix on `c3`) | [port-unbind-fix.md](port-unbind-fix.md) |
 | why automatic database failover was designed this way | [db-auto-failover-plan.md](db-auto-failover-plan.md) (implemented) |
 
 ## By document
@@ -28,6 +29,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | operations-cheatsheet.md | reference | current |
 | k8s-operations.md | runbook | current; node add/retire procedures follow the 2026-10-20 `w4`/`w5`/`w1` changes (rehearsed live) |
 | octavia-finance-lb.md | build record + runbook | current; load balancers created by hand |
+| port-unbind-fix.md | incident + fix | fixed and proven 2026-10-20 |
 | db-ha-patroni.md | runbook + proof | current; five failure drills passed on live prod 2026-10-20 |
 | db-replication.md | build record (background) | replication build and monitoring current; its manual failover steps are superseded by Patroni |
 | db-auto-failover-plan.md | design record | implemented 2026-10-20 |

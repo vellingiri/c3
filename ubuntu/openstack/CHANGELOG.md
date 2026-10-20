@@ -22,6 +22,11 @@ Update this file in the same commit as any change, and list anything done **by h
 - Monitor (`db-replication-monitor`) also checks Patroni on each node, the cluster view and the witness.
 - **Drills, all passed on live prod:** planned switchover 14-16 s; process kill ~5 s; primary VM power-off ~40 s (app self-recovered, no data loss); network partition (no split brain, ~12 s failed writes); witness loss (no effect). The first VM-crash drill found the asyncpg shared-timeout problem, fixed and repeated.
 
+### Everything on the database VMs now comes from Terraform (cloud-init); a replaced node needs nothing by hand
+- New `cloud-init/db-ha.yaml.tftpl` + `files/db-ha-node.sh`: etcd (joins a running cluster or forms one), nftables guard, Patroni config incl. `pg_hba`, patronictl config, ntfy callback. `ip:` is now required in `nodes.yaml` for database/witness nodes (same addresses as today). Passwords are Terraform variables from the git-ignored `environments/prod/secrets.auto.tfvars` (`scripts/db-ha-secrets.sh`). Existing VMs untouched (plan: no changes).
+- **Found while testing a `db-witness` replace and fixed on `c3` (by hand, in OpenStack, not Terraform):** Nova could not release a Terraform-owned port when deleting a server, because Neutron refused the update for the user `neutron`. Granted it the `service` role (`openstack role add --user neutron --project service service`) and restarted `nova-compute`. Details and proof: `docs/port-unbind-fix.md`.
+- **OpenStack actions taken during this work (all reverted):** QA VMs `learn`, `w2` and `w3` were stopped for a scratch rehearsal and started again; the three scratch VMs `dbt1`, `dbt2`, `dbt-witness` (and their ports) failed with NoValidHost (stopped VMs keep their memory reserved) and were deleted; a test VM `porttest` and its port were created and deleted to prove the port fix; the stale port of the replaced witness had its `device_id` cleared by hand once.
+
 ### Limits
 Asynchronous replication (a hard failure can lose the last seconds of writes); losing two of the three etcd machines stops automatic failover.
 
