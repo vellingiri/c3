@@ -15,11 +15,15 @@ Commands you need every week, and a "is everything healthy?" sweep. Details live
 The old `haproxy` and `qa` aliases are gone: the VM and the name were retired (`../CHANGELOG.md`).
 
 ### Reachability (who can reach what)
-- **`c3` reaches VMs only by floating IP** (192.168.2.x). The private addresses (10.0.1.x) have no route from `c3`: use `192.168.2.x`, or a DNS name, in any check you run there.
+- **`c3` can reach VMs on both their floating IPs (192.168.2.x) and their private IPs (10.0.1.x).** Until 2026-10-20 it could only use floating IPs; a static route was added:
+  `10.0.1.0/24 via 192.168.2.174` (192.168.2.174 is the external address of the OpenStack router `main_router`; its private side is `10.0.1.1`). It is set at runtime and in
+  `/etc/network/interfaces` (`up`/`down` lines under `br0`; backup `/etc/network/interfaces.bak-20261020`). If the router's gateway address ever changes
+  (`openstack router show main_router -c external_gateway_info`), update the route in both places. If private addresses stop answering from `c3`, check
+  `ip route | grep 10.0.1` first.
 - Inside the cloud (pods, the load balancers, the VMs among themselves) the private addresses are used: the app's `DATABASE_URL` is `10.0.1.191`, the load balancer pools hold private IPs.
-- **Worker NodePorts (30080, 30443) answer from `c3` but not from your Mac** (a different subnet, `192.168.1.x`), so test a worker from `c3`:
-  `ssh c3 'curl -s -o /dev/null -w "%{http_code}\n" http://192.168.2.52:30080/health'` (`w1`'s floating IP; 200 when healthy). The load balancer's own member status is the better test:
-  `ssh c3 'openstack loadbalancer member list finance-pool'`.
+- **Your Mac cannot reach the private network or the worker NodePorts (30080, 30443)**: it is on a different subnet (`192.168.1.x`). Test a worker from `c3`:
+  `ssh c3 'curl -s -o /dev/null -w "%{http_code}\n" http://10.0.1.67:30080/health'` (`w1`; 200 when healthy; the floating IP `192.168.2.52` works too). The load balancer's own
+  member status is the better test: `ssh c3 'openstack loadbalancer member list finance-pool'`.
 
 ### OpenStack CLI
 Run on `c3`, whose login shell is already authenticated (the prompt reads `c3(keystone)`; there is no `admin-openrc.sh` to source), or from your Mac through `ssh c3 '<command>'`. On your Mac,

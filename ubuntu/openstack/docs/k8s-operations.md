@@ -38,7 +38,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://finance.rdulinux.com/health
    `terraform plan`, then `apply`. The VM gets its name, floating IP and DNS record.
 2. It joins by itself using `/nfsshare/join-prod.sh` (retries 5 times). The token lasts **24 hours**; if it is older, recreate it on `c1` first:
    `ssh c1.prod 'sudo kubeadm token create --print-join-command | sudo tee /nfsshare/join-prod.sh'`.
-3. `kubectl get nodes` until it is `Ready` (to test its NodePort run `curl http://<its floating IP>:30080/health` **from `c3`**, not from your Mac and not against the private IP; see `operations-cheatsheet.md`, Reachability) (cloud-init shows `error - running` until the install ends: the harmless `update-locale` message).
+3. `kubectl get nodes` until it is `Ready` (to test its NodePort run `curl http://<its private or floating IP>:30080/health` **from `c3`**, not from your Mac; see `operations-cheatsheet.md`, Reachability) (cloud-init shows `error - running` until the install ends: the harmless `update-locale` message).
 4. **Add it to both load balancers** (they do not follow Kubernetes nodes): see `octavia-finance-lb.md`, "Workers change over time".
    `finance-pool` on `finance-lb` (port 30080) and `argo-backend` on `argo-lb` (port 30443). Confirm members go `ONLINE`.
 5. Existing pods stay where they are. To use the new node, roll the apps one by one: `k rollout restart deploy/backend` (then `frontend`, `docs`, `nginx`),

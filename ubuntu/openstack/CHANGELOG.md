@@ -37,6 +37,7 @@ Update this file in the same commit as any change, and list anything done **by h
 - The `loadbalancer` Terraform role, `cloud-init/haproxy.*`, the temporary `web` role and its security group.
 
 ### Not in Terraform (done by hand; see `docs/ARCHITECTURE.md`)
+- **`c3` host route** `10.0.1.0/24 via 192.168.2.174` (runtime and in `/etc/network/interfaces`, backup `.bak-20261020`): `c3` can now reach VMs on their private IPs, not only floating IPs.
 - All Octavia objects and their floating IPs; Octavia needed `[health_manager] controller_ip_port_list` and `heartbeat_key`, and **both** `octavia-worker` and `octavia-health-manager` must be restarted after any `octavia.conf` change.
 - Placement allocation ratios raised (disk 1.5, memory 1.1) and the project core quota set to 64 (two 2 GB amphorae per HA load balancer).
 - Kubernetes secret `db-secret` is edited during a database failover; PostgreSQL roles, rules, slot and conf files on `db1`/`db2`; the monitor on the runner.
