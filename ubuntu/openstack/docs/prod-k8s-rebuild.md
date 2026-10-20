@@ -1,8 +1,8 @@
 # Rebuild the prod k8s cluster (park workloads on QA)
 
 > **Read this first.** The phases below were written, and executed on 2026-10-19, when the `haproxy` VM was the front door. That VM is gone:
-> traffic now enters through the Octavia load balancers `finance-lb` (192.168.2.5) and `argo-lb` (192.168.2.113), and prod has workers `w2` to `w5`
-> (not `w1..w3`). The data, secrets and Argo CD steps are unchanged. Wherever a phase says "edit haproxy.cfg", use the adaptation below.
+> traffic now enters through the Octavia load balancers `finance-lb` (192.168.2.5) and `argo-lb` (192.168.2.113), and prod has workers `w1` to `w5`
+> (five, not three). The data, secrets and Argo CD steps are unchanged. Wherever a phase says "edit haproxy.cfg", use the adaptation below.
 > The adaptation is derived from the Octavia setup and **has not been rehearsed**; try it on a quiet day and correct this page.
 
 ### Adapting Phase 2 and Phase 4 to Octavia (swap pool members instead of haproxy.cfg)
@@ -17,7 +17,7 @@ Pools are static lists of `private IP : NodePort` (`octavia-finance-lb.md`). "Cu
    ```
 3. Remove the prod workers from both pools (`openstack loadbalancer member delete finance-pool w2`, ...). Traffic now runs on QA. Compare public paths first, as in the 2026-10-19 log below.
 4. Rebuild prod (Phase 3). The nodes the new prod cluster gets keep their ports and private IPs, so the old pool member addresses stay valid.
-5. Move back: re-add the prod workers (`w2` to `w5`), wait `ONLINE`, remove the QA members. Cron jobs and the Argo Application move as in Phases 1 and 4.
+5. Move back: re-add the prod workers (`w1` to `w5`), wait `ONLINE`, remove the QA members. Cron jobs and the Argo Application move as in Phases 1 and 4.
 Other changes since the log below: the finance app is at `http://finance.rdulinux.com` (no `qa.rdulinux.com`); db access is by IP `10.0.1.191` (`db1`); the kubeconfig and the CI runner's kubeconfig must be replaced after the CA changes (`k8s-operations.md`).
 
 Goal: recreate `c1`, `w1..3` from the current cloud-init (proper hostnames /

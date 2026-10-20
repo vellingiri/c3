@@ -35,6 +35,7 @@ nodes:
 
   # Kubernetes cluster. VM names never contain the environment; it is a tag/metadata.
   c1: { role: controller, flavor: m1.medium }
+  w1: { role: worker, flavor: m1.small }   # re-added 2026-10-20 (a fresh VM; the first w1 was retired the same day)
   w2: { role: worker, flavor: m1.small }
   w3: { role: worker, flavor: m1.small }
   w4: { role: worker, flavor: m1.small }

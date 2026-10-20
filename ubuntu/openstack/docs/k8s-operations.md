@@ -4,7 +4,7 @@ Runbook for day-to-day and for node changes. Facts checked against the manifests
 Where things are: `ARCHITECTURE.md`. Rebuilding a whole cluster: `prod-k8s-rebuild.md`.
 
 ## How the app is built to survive a node loss (since 2026-10-20)
-Every app (`backend`, `frontend`, `docs`, `nginx`) runs **3 replicas, one per node**, on the 4 workers (`w2` to `w5`), so one worker is always free.
+Every app (`backend`, `frontend`, `docs`, `nginx`) runs **3 replicas, one per node**, on the 5 workers (`w1` to `w5`), so two workers are always free.
 | Setting | Value | Why |
 |---|---|---|
 | `replicas` | 3 | one can be lost or updated while 2 still serve |
@@ -16,8 +16,8 @@ Every app (`backend`, `frontend`, `docs`, `nginx`) runs **3 replicas, one per no
 | `preStop: sleep 8` (backend, nginx) | pod stays up while the load balancer stops sending to it | no dropped requests during rollouts and drains |
 | nginx `readinessProbe` on `/health` | a pod gets traffic only when it answers | |
 Consequences to remember:
-- **You need at least 4 workers.** With 3, a drain leaves the evicted pod Pending (every other node already has one) and the app runs on 2 copies until the node is back.
-- **Adding a 5th worker does not spread the app further**: 3 replicas occupy 3 nodes. Raise `replicas` in git if you want more, and read the next point.
+- **You need at least 4 workers** (prod has 5). With 3, a drain leaves the evicted pod Pending (every other node already has one) and the app runs on 2 copies until the node is back.
+- **Adding workers beyond 3 does not spread the app further**: 3 replicas occupy 3 nodes, and a new worker stays idle until a rollout places a pod there. Raise `replicas` in git if you want more, and read the next point.
 - **nginx's login rate limit (`20r/m`, burst 10) is per pod**, so 3 pods allow about 3 times the limit of one. Lockouts and limits counted by address are per pod too.
 - **Argo CD's `selfHeal` reverts manual changes** (scaling, suspending a CronJob, editing a Deployment). Change git, or pause auto-sync (below).
 

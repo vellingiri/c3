@@ -16,12 +16,12 @@ Update this file in the same commit as any change, and list anything done **by h
 | `lb.rdulinux.com` | existed for a few minutes as the renamed `haproxy`, then retired |
 | `argo.rdulinux.com` → 192.168.2.5 | now → **192.168.2.113**, its own load balancer `argo-lb` |
 | VM `db` | renamed **`db1`** (same VM, IP and data). `db.rdulinux.com` is now an alias for the current primary (TTL 60 s) |
-| prod worker `w1`; test VMs `web1`, `web2` | retired / deleted |
-| ssh aliases `w1` (prod), `qa` | removed; `ssh w1.qa` still works |
+| the *original* prod worker `w1` (10.0.1.118) and the test VMs `web1`, `web2` | deleted; prod `w1` was re-created as a new VM |
+| ssh alias `qa` | removed; `ssh w1.prod` and `ssh w1.qa` both work |
 
 ### Added
 - **Octavia load balancers** (built by hand, doc: `docs/octavia-finance-lb.md`): `finance-lb` (active/standby, two amphorae, flavor `ha`) at 192.168.2.5 for the finance app, `argo-lb` (one amphora) at 192.168.2.113 for Argo CD. Health-checked, round robin over the prod workers. Failover tested: 485 requests, 0 failed while the active amphora was powered off.
-- **Workers `w4` and `w5`** in prod (4 workers: `w2` to `w5`); `w1` drained and retired with 0 failed requests.
+- **Workers `w4` and `w5`** in prod; the original `w1` was drained and retired with 0 failed requests, then **a fresh `w1` was added the same day** (private 10.0.1.67, floating 192.168.2.52), so prod is `c1` plus **`w1` to `w5`**. All five are members of both load balancer pools.
 - **Finance app on 3 replicas**, one per node, with required anti-affinity, `PodDisruptionBudget`s, one-at-a-time rollouts and `preStop` drains (finance repo, `k8s/`; doc: `docs/k8s-operations.md`).
 - **PostgreSQL replica `db2`** streaming from `db1`; scripts `db-replica-setup.sh` and `db-replication-status.sh`; **replication monitor with ntfy alerts** on the runner (`install-db-monitor.sh`). Doc and runbook: `docs/db-replication.md`.
 - **Rehearsed on live prod:** planned switchover both ways (26 s and 23 s of failed writes) and an unplanned crash of `db1` (failover with 0 rows lost; the monitor alerted in about 80 s and again on split brain).
