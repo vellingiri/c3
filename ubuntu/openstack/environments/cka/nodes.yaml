@@ -18,7 +18,8 @@ defaults:
     calico_version: v3.28.0
     pod_cidr: 192.168.0.0/16
     cluster_name: cka
-    api_endpoint: ""   # name of the cluster's API load balancer once it is HA (api.cka.rdulinux.com); empty = the first controller's floating IP
+    join_delay: "0"      # seconds a control-plane join waits (stagger nodes that are created together)
+    api_endpoint: "api.cka.rdulinux.com"   # name of the cluster's API load balancer once it is HA (api.cka.rdulinux.com); empty = the first controller's floating IP
 
 nodes:
   # m1.small (2 vCPU, 4 GB) is enough for kubeadm and keeps room on c3 (see docs/cka-cluster.md for the capacity numbers)
@@ -26,3 +27,6 @@ nodes:
   w1: { role: worker, flavor: m1.small }
   w2: { role: worker, flavor: m1.small }
   w3: { role: worker, flavor: m1.small }
+  # control-plane nodes 2 and 3 (2026-10-20): join through api.cka.rdulinux.com by themselves; c3 waits 5 minutes so etcd takes one member at a time
+  c2: { role: controller_join, flavor: m1.small }
+  c3: { role: controller_join, flavor: m1.small, vars: { join_delay: "300" } }
