@@ -41,7 +41,5 @@ nodes:
   w1: { role: worker, flavor: m1.small }   # re-added 2026-10-20 (a fresh VM; the first w1 was retired the same day)
   w2: { role: worker, flavor: m1.small }
   w3: { role: worker, flavor: m1.small }
-  w4: { role: worker, flavor: m1.small }
-  w5: { role: worker, flavor: m1.small }
 
   # c2, w4, w5, w6 were decommissioned by removing them from this file.
