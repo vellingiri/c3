@@ -4,11 +4,10 @@ What is deliberately not done yet, who decides, and what finishes it. Update thi
 (and say so in `../CHANGELOG.md`). Last updated 2026-10-20.
 
 ## Waiting for a decision or a moment
-| Item | Why it is open | What finishes it |
-|---|---|---|
-
+Nothing is open (2026-10-20).
 
 ## Accepted limits (no action planned)
+- The host `c3` is close to its real memory: 67 of 80 GB in use on 2026-10-20 with 118 GB allocated (ratio 1.7). Check `free -m` ("available") before adding VMs; the allocation ratio is not a safety margin (`amphora-reboot-fix.md`).
 - Database replication is synchronous but not strict: a standby outage means about 35 s of paused writes, then asynchronous until it returns (`db-ha-patroni.md`).
 - Losing three of the five etcd machines (`dbw1`, `dbw2`, `dbw3`, `db1`, `db2`) stops automatic database failover; any two are survived. Emergency steps: `db-ha-patroni.md`. Everything runs on one host (`c3`), so a host loss still takes everything.
 - A really dead amphora is replaced automatically after 5 minutes (`heartbeat_timeout = 300`) or at once with `openstack loadbalancer failover <lb>`; both load balancers have a standby (`amphora-reboot-fix.md`).
