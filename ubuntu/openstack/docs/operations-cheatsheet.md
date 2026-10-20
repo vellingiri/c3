@@ -64,6 +64,14 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 | etcd snapshots | `ssh c1.prod 'ls -lh /var/backups/etcd \| tail -3'` | a recent file |
 | CI | `gh run list --repo vellingiri/finance --limit 3` | `completed/success` |
 
+## Host virtualization check on `c3`: `virt-host-validate`
+Run **`virt-host-validate qemu`** (the only driver used here). A plain `virt-host-validate` also runs the LXC checks and ends with a red line that is not a problem (checked 2026-10-20):
+| Line | Meaning | Action |
+|---|---|---|
+| `LXC: ... cgroup 'freezer' controller support: FAIL` | `c3` (Debian 13) uses **cgroup v2** only. v2 has no separate `freezer` controller (freezing is built in as a per-cgroup `cgroup.freeze` file), and the check looks for the old v1 one. LXC is not installed (`virsh -c lxc:///` has no driver) and OpenStack here uses QEMU/KVM only | none. Do not move the host back to cgroup v1 to silence it: v2 is the default and what systemd, libvirt and Kubernetes nodes expect, and nothing here needs LXC |
+| `QEMU: ... secure guest support: WARN (Unknown if this platform has Secure Guest support)` | the CPU (Intel Core i9-14900K, a desktop part) has no confidential-computing feature (Intel TDX, AMD SEV; SGX also absent) to report. Secure/encrypted guests are not used or needed | none. It cannot be fixed in software; it needs a server CPU with TDX/SEV and firmware support |
+Everything else must read `PASS` (KVM, `/dev/kvm`, vhost-net, tun, the cgroup controllers, IOMMU).
+
 ## Name lookups on `c3`
 `c3` resolves short names through the search list `rdulinux.com prod.rdulinux.com qa.rdulinux.com` with `options ndots:2`: `w1.prod`, `c1.qa`, `w2` (prod), `finance` and `db1` all work in `nslookup`, `host`, `dig +search` and `ssh`
 (details in `c3-reboot.md`, "Other fixes"). Your Mac uses the aliases in `~/.ssh/config` for ssh.
