@@ -1,0 +1,27 @@
+# CKA practice cluster: 1 control-plane node and 3 workers, built with the same kubeadm cloud-init as prod and qa.
+# DNS: c1.cka.rdulinux.com, w1.cka.rdulinux.com, ... (zone added in infra/infra.yaml). Throw it away and rebuild it as often as you like:
+#   terraform destroy   (or remove the nodes) and apply again. docs/cka-cluster.md has the whole procedure.
+
+environment: cka   # tag/metadata on every resource; never part of a VM name
+
+defaults:
+  image: ubuntu2404
+  keypair: default-key
+  security_group_ids:
+    - f00e0d86-c4f7-492d-893d-dab70cf732be  # default
+    - 80068ced-6e70-4977-aa86-3ae9b40d3c4e  # k8s
+  domain: cka.rdulinux.com
+  vars:
+    dns_server: 192.168.2.2
+    nfs_server: repo.rdulinux.com
+    k8s_version: v1.30
+    calico_version: v3.28.0
+    pod_cidr: 192.168.0.0/16
+    cluster_name: cka
+
+nodes:
+  # m1.small (2 vCPU, 4 GB) is enough for kubeadm and keeps room on c3 (see docs/cka-cluster.md for the capacity numbers)
+  c1: { role: controller, flavor: m1.small }
+  w1: { role: worker, flavor: m1.small }
+  w2: { role: worker, flavor: m1.small }
+  w3: { role: worker, flavor: m1.small }

@@ -48,6 +48,7 @@ dns:
   extra_zones:                   # one zone per environment; its VMs register here
     - prod.rdulinux.com.
     - qa.rdulinux.com.
+    - cka.rdulinux.com.
   reverse_zone: 2.168.192.in-addr.arpa.
   email: admin@rdulinux.com
   # key => {ip, ptr?, zone?, name?}. zone defaults to the main zone, name to the key,
