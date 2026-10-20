@@ -37,4 +37,4 @@ Rebuilding from nothing later gives a fresh cluster with a new CA: fetch the kub
 - **Cluster upgrade with kubeadm:** the nodes install `kubeadm`/`kubelet`/`kubectl` from the v1.30 repo and hold them; to practise an upgrade point apt at the next minor repo, `kubeadm upgrade plan/apply`, drain, upgrade kubelet, uncordon.
 - **Add / remove a node:** change `nodes.yaml` and apply (`k8s-operations.md` has the drain and delete steps; same procedure).
 - **Troubleshooting drills:** `systemctl stop kubelet` on a worker, break a static pod manifest in `/etc/kubernetes/manifests`, change a certificate path, then repair.
-- This cluster has one control plane. An HA control plane (2 or 3) needs a shared API address in front; not built here (an even 2 gives no etcd fault tolerance anyway).
+- **This cluster has three control-plane nodes** (`c1`, `c2`, `c3`) behind the API name `api.cka.rdulinux.com` (Octavia load balancer `cka-api`), built as the rehearsal for prod and drilled by powering `c1` off (`k8s-ha-control-plane.md`). Your kubeconfig `server:` is `https://api.cka.rdulinux.com:6443`. Practise etcd backup/restore and `kubeadm upgrade` on it as a real HA cluster.

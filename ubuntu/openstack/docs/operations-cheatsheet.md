@@ -61,6 +61,8 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 | Replication | `scripts/db-replication-status.sh db1 db2` | `streaming, behind: 0 bytes`, exit 0 |
 | Monitor | `ssh runner 'systemctl is-active db-monitor.timer; /usr/local/sbin/db-replication-monitor --dry-run'` | `active`; `db1 primary, db2 replica, lag 0 bytes` |
 | Backups | `k get cronjob` and `k get jobs --sort-by=.metadata.creationTimestamp \| tail -3` | hourly and daily jobs `Complete` |
+| Terraform state backups | `ssh s3 'ls -l /backup/terraform-state/last-ok'` | less than an hour old (`s3-state-store.md`) |
+| Kubernetes API behind the VIP | `ssh c3 'openstack loadbalancer member list prod-api-pool -c name -c operating_status'` | 3 members `ONLINE` once c2 and c3 exist (`k8s-ha-control-plane.md`) |
 | etcd snapshots | `ssh c1.prod 'ls -lh /var/backups/etcd \| tail -3'` | a recent file |
 | CI | `gh run list --repo vellingiri/finance --limit 3` | `completed/success` |
 
