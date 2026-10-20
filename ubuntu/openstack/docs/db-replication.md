@@ -92,7 +92,8 @@ a changed `pg_hba.conf`, a different Postgres major version on the two hosts (ne
 ## Failover: the primary (db1) is lost
 The goal is one writable primary. **Never leave both writable** (split brain).
 1. **Confirm and fence.** Make sure `db1` is really gone, then stop it so it cannot come back writing:
-   `ssh c3 'openstack server stop db1'` (or leave it if it is already off). If it is just unreachable, stop it anyway.
+   `ssh c3 'openstack server stop db1'` (a `409 ... vm_state stopped` means it is already off). If it is just unreachable, stop it anyway,
+   and keep it stopped until step 7: a crashed primary boots **writable** (tested below).
 2. **See how much the replica has** (any rows after this moment are lost):
    `ssh db2 "sudo -u postgres psql -Atc 'select pg_last_xact_replay_timestamp(), now()'"`
 3. **Promote:** `ssh db2 "sudo -u postgres psql -Atc 'select pg_promote(wait => true, wait_seconds => 60)'"` -> `t`.
@@ -144,8 +145,35 @@ Use when you want the other VM to be primary (patching, resizing, moving). Rehea
 | **Switch back db2 -> db1** | 23 s window; secret and alias back to `10.0.1.191` / `192.168.2.124`; `db2` rebuilt as replica |
 | After both switchovers | 85 tables, 118,314 rows identical on both; backup job succeeded; 3/3 pods for every app; Argo Synced and Healthy |
 
-Not tested: a real, unplanned loss of `db1` (VM off or unreachable) with `db2` promoted without a read-only step. The promotion and repointing
-commands are the same ones proven above; what differs is that the last few transactions may be missing (step 2 of the failover shows how many).
+## Unplanned outage test (2026-10-20, live prod)
+`db1` was powered off abruptly (`sync` then `echo o > /proc/sysrq-trigger`: no Postgres shutdown, no read-only step) while a writer on it inserted a
+numbered row about 5 times a second. Then the failover steps above were run, `db1` was powered on, rebuilt as a replica of `db2`, and the roles
+were switched back with a planned switchover.
+
+| Check | Result |
+|---|---|
+| Monitor noticed | alert at 10:23:01, about 80 s after the crash (it polls every 2 min, so 2 min is the worst case) |
+| Promote `db2` | under 1 s |
+| Secret edit + backend rollout + `db` alias | 27 s after the promotion; app on `db2` with 0 backend errors, writes OK, a backup job dumped from it |
+| Time from crash to app on `db2` | 106 s in the test, of which about 75 s was my own wait (macOS `nc` needs ~75 s to give up on a dead host). Plan on **detection (up to 2 min) + you reacting + about 30 s of commands** |
+| Data lost | **0 rows** (74 of 74 probe rows on `db2`). Best case: the crash was preceded by a `sync` and the write rate was low. A real crash can lose the last fraction of a second |
+| `db1` after power-on | back in 18 s **as a second writable primary** (split brain). The monitor sent "TWO writable primaries". The app was unaffected because it connects by IP to `db2` |
+| Recovery | `REBUILD=1 scripts/db-replica-setup.sh db2 db1` (wipes `db1`'s data), then a planned switchover back; monitor healthy, app 3/3 pods, Argo Synced |
+
+Lessons that are now in the steps above:
+- **`/health` does not check the database.** It returned 200 the whole time `db1` was down, so never use it to verify a failover. Use the
+  pod check (`select inet_server_addr(), pg_is_in_recovery()` as the app's user) and a backup job.
+- **A crashed primary boots writable.** After a failover keep the old primary **stopped** (`openstack server stop db1`; a `409 ... vm_state stopped`
+  means it is already off) until you are ready to wipe it with the rebuild command. Anything that still writes to it creates data `db2` will never see.
+- Before wiping the old primary, compare it with the new one if you need the last transactions:
+  `select max(...)` on a table you care about, on both. Whatever only the old primary has can be dumped from it and replayed by hand.
+
+## Multi-host connection string (tested, not adopted)
+Both `asyncpg` 0.29 (the backend) and `libpq` (`psql`, `pg_dump`, so the backup jobs) accept a list of hosts with `target_session_attrs=read-write`
+and pick whichever one is writable. Tested from a backend pod on 2026-10-20 with the replica listed first: both connected to the primary.
+With `DATABASE_URL=postgresql://user:pass@10.0.1.191:5432,10.0.1.69:5432/financedb?target_session_attrs=read-write` a failover would need no secret
+edit and no backend restart (the pool reconnects). Not adopted yet: it changes the production secret and has not been tested through an actual failover.
+See `db-auto-failover-plan.md`.
 
 ## Troubleshooting
 - **Replica not streaming:** `ssh db2 'journalctl -u postgresql@16-main -n 50 --no-pager'`. Typical causes: wrong or rotated password
@@ -164,7 +192,8 @@ commands are the same ones proven above; what differs is that the last few trans
 (optional) remove `/etc/postgresql/16/main/conf.d/20-replication.conf` and the `replicator` rule on `db1`.
 
 ## Not done (decisions for later)
-- Automatic failover (Patroni or repmgr with a witness) and a virtual IP so the app never needs its secret edited.
+- Automatic failover and an endpoint that follows the primary: a design plan with options, migration order, drills and the decisions needed is in
+  `db-auto-failover-plan.md` (nothing built).
 - Synchronous replication (no data loss, but writes stop if the replica is down).
 - Alerting independent of the runner (a second watcher elsewhere), and disk-space checks on the two DB VMs.
 - Reading from the replica (reports, the nightly backup) to take load off the primary. The backup jobs still dump from the primary.

@@ -11,7 +11,7 @@ scripts/adopt-node.sh    bring an existing VM under Terraform without recreating
 scripts/k8s-copy-between.sh  copy k8s objects between clusters through two local kubeconfigs (secrets stay in the pipe)
 scripts/db-replica-setup.sh  make db2 a streaming replica of db1 (re-runnable);  scripts/db-replication-status.sh checks it
 scripts/install-db-monitor.sh  install the replication monitor + ntfy alerts on the runner (scripts/db-replication-monitor.sh)
-docs/                    runbooks: db-replication (db1/db2 failover), octavia-finance-lb (finance-lb, argo-lb),
+docs/                    runbooks: db-replication (db1/db2 failover), db-auto-failover-plan (proposal), octavia-finance-lb (finance-lb, argo-lb),
                          finance-db-restore (backups), prod-k8s-rebuild, etcd-restore-rehearsal
 ```
 
