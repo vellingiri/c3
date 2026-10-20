@@ -57,7 +57,7 @@ dns:
     c3:      { ip: 192.168.2.2, ptr: true }
     repo:    { ip: 192.168.2.3, ptr: true }
     backup:  { ip: 192.168.2.4, ptr: true }
-    haproxy: { ip: 192.168.2.5, ptr: true }   # name kept for old links; 192.168.2.5 is the Octavia load balancer
+    lb:      { ip: 192.168.2.5, ptr: true }   # the Octavia load balancer (was the haproxy VM)
     argo:    { ip: 192.168.2.5 }
     "@":     { ip: 13.140.58.46 }
     www:     { ip: 13.140.58.46 }

@@ -1,12 +1,12 @@
 locals {
   # Ordered cloud-init parts per role. Add a role = add a line here + a template.
   role_parts = {
-    controller   = ["base", "k8s-common", "k8s-controller"]
-    worker       = ["base", "k8s-common", "k8s-worker"]
-    gitlab       = ["base", "gitlab"]
-    runner       = ["base", "runner"]
-    database     = ["base", "database"]
-    learn        = ["base", "learn"]
+    controller = ["base", "k8s-common", "k8s-controller"]
+    worker     = ["base", "k8s-common", "k8s-worker"]
+    gitlab     = ["base", "gitlab"]
+    runner     = ["base", "runner"]
+    database   = ["base", "database"]
+    learn      = ["base", "learn"]
   }
 
   fqdn = "${var.name}.${var.domain}"
