@@ -14,6 +14,13 @@ Commands you need every week, and a "is everything healthy?" sweep. Details live
 `/opt/c3/bin/mssh host1 host2 ...` opens synchronized tmux panes (type once, runs on all).
 The old `haproxy` and `qa` aliases are gone: the VM and the name were retired (`../CHANGELOG.md`).
 
+### Reachability (who can reach what)
+- **`c3` reaches VMs only by floating IP** (192.168.2.x). The private addresses (10.0.1.x) have no route from `c3`: use `192.168.2.x`, or a DNS name, in any check you run there.
+- Inside the cloud (pods, the load balancers, the VMs among themselves) the private addresses are used: the app's `DATABASE_URL` is `10.0.1.191`, the load balancer pools hold private IPs.
+- **Worker NodePorts (30080, 30443) answer from `c3` but not from your Mac** (a different subnet, `192.168.1.x`), so test a worker from `c3`:
+  `ssh c3 'curl -s -o /dev/null -w "%{http_code}\n" http://192.168.2.52:30080/health'` (`w1`'s floating IP; 200 when healthy). The load balancer's own member status is the better test:
+  `ssh c3 'openstack loadbalancer member list finance-pool'`.
+
 ### OpenStack CLI
 Run on `c3`, whose login shell is already authenticated (the prompt reads `c3(keystone)`; there is no `admin-openrc.sh` to source), or from your Mac through `ssh c3 '<command>'`. On your Mac,
 `source /opt/c3/ubuntu/openstack/scripts/openstack-shortcuts.sh` makes `openstack server list` show an `Env` column (prod/qa from the VM's metadata).
