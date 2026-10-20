@@ -8,7 +8,7 @@ What is deliberately not done yet, who decides, and what finishes it. Update thi
 |---|---|---|
 | **A 4th prod worker** | Prod has 3 workers and no spare node, so draining one blocks until it is back (`k8s-operations.md`). Ignored on purpose for now; there is also not enough capacity while the CKA cluster runs | add `w4` to `environments/prod/nodes.yaml` (2 vCPU, 4 GB), apply, add its private address to `finance-pool` and `argo-backend` (`octavia-finance-lb.md`). Needs about 4 GB RAM and 10 GB disk |
 | **Destroy the CKA cluster when you are done practising** | it holds 16 GB RAM and 40 GB disk of the host's headroom (finance-lb's two-amphora rebuild needs about 4 GB) | `cd environments/cka && terraform destroy` (`cka-cluster.md`) |
-| Runner kernel oops | the `runner` guest crashed once in the `.NET` GitHub runner process, 72 s after boot (reboot test 5); a similar `segfault at 0 ip 0` of an `openstack` client was logged on the host. Did not recur after a stop/start. Cause unknown | if it recurs: note the time, capture `openstack console log show runner` and `dmesg` on `c3`, check the host kernel (6.12.95) and the nested-KVM setting |
+| Runner kernel oops (seen once, test 5; not seen in test 6) | the `runner` guest crashed once in the `.NET` GitHub runner process, 72 s after boot (reboot test 5); a similar `segfault at 0 ip 0` of an `openstack` client was logged on the host. Did not recur after a stop/start. Cause unknown | if it recurs: note the time, capture `openstack console log show runner` and `dmesg` on `c3`, check the host kernel (6.12.95) and the nested-KVM setting |
 | Two-amphora failover of `finance-lb` | `openstack loadbalancer failover finance-lb` fails about half the time with a Placement "no allocation candidates" error; a retry works. Cause not found | retry; open a deeper investigation only if it blocks a rebuild |
 
 ## Accepted limits (no action planned)
@@ -19,4 +19,4 @@ What is deliberately not done yet, who decides, and what finishes it. Update thi
 
 ## Done recently (so nobody redoes it)
 Cinder removed from the catalog (2026-10-20; backups in `/root/backups/cinder-removal-20261020` on `c3` and `/root/backups/c3-cinder-removal-20261020.tgz` on `backup`, restore steps inside);
-`ram_allocation_ratio` 1.2; `w4`/`w5` retired; `learn` removed; database HA built by Terraform; reboot tests 1 to 5 (`c3-reboot.md`).
+`ram_allocation_ratio` 1.2; `w4`/`w5` retired; `learn` removed; database HA built by Terraform; reboot tests 1 to 6, including the unattended automatic restart (`c3-reboot.md`).

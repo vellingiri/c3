@@ -41,6 +41,9 @@ Update this file in the same commit as any change, and list anything done **by h
 - `c3` back in 31 s after `systemctl reboot --force --force`; everything recovered (front doors 200, 12/12 pods, Patroni 1 Leader + 1 Replica, etcd 3/3, same amphorae). Found: VMs started right after boot can stick in `powering-on` (new `scripts/c3-restart-stuck-vms.py`; wait a minute after `nova-compute` is up); `openstack server reboot --hard` fails because Cinder is disabled (use stop/start); the `runner` guest hit a kernel oops once (cause unknown, did not recur).
 - Capacity/Cinder note: Cinder has been disabled since August 2026; nothing here uses volumes.
 
+### Host reboot test 6: plain reboot with every VM running (automatic start), passed
+- `systemctl reboot` at 18:46:40; `c3` back at 18:52:05; all 19 VMs started by themselves; both front doors 200 about 4 minutes later; no failovers of load balancers, no stuck VM, no manual step (`docs/c3-reboot.md` Test 6).
+
 ### Cinder removed from the catalog
 - Cinder (block storage) had been disabled since 2026-08-17 and nothing used volumes (0 volumes, snapshots, backups, 0 volume attachments in Nova). Its catalog service `cinderv3` and its 3 endpoints were deleted; the packages and the `cinder` database stay installed but unused. **Backups** (before deleting): `/root/backups/cinder-removal-20261020/` on `c3` (database dump, `/etc/cinder`, service and endpoint JSON, `RESTORE.txt`, checksums) and a copy on the `backup` host at `/root/backups/c3-cinder-removal-20261020.tgz`. Effect: `openstack server reboot --hard` works again (tested on a CKA worker).
 - New `docs/pending.md`: the list of open items and accepted limits.

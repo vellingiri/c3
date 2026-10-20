@@ -115,6 +115,17 @@ Why: a plain `systemctl reboot` of `c3` sometimes sticks, so the flow was tried 
 **Patroni during the shutdown/start:** the database VMs came back one at a time (`db2` before `db1`/`dbw`), so etcd had no majority for a while and the leader moved: timelines 15 (`db2`), 16 (`db1`), 17; the end state is `db1` Leader, `db2` Replica streaming, lag 0, one primary at every check (no split brain). Start `db1` and `dbw` first, then `db2`, as the Start list above says.
 Not covered by this test: automatic VM start (`resume_guests_state_on_host_boot`; the VMs were stopped through Nova on purpose, which Nova remembers as intentional), and the second amphora-related failover flaw.
 
+## Test 6 (2026-10-20, evening): plain `systemctl reboot` with all 19 VMs running, automatic VM start, nothing done by hand
+This is the real "host rebooted" case: `resume_guests_state_on_host_boot = true` (Nova) with `ON_SHUTDOWN=shutdown` / `SHUTDOWN_TIMEOUT=300` (libvirt-guests), health manager left **enabled** (`heartbeat_timeout = 900`).
+| | |
+|---|---|
+| Before | CI idle; DB dump, etcd snapshot, Patroni 1 Leader + 1 Replica |
+| `systemctl reboot` at 18:46:40 | `c3` stopped answering 11 s later (it did **not** get stuck this time: the guests shut down gracefully) and answered ssh again at **18:52:05** (5 min 25 s from the command) |
+| VMs | all 19 started by themselves: guests running 7 / 10 / 13 / 16 / 19 within about 60 s of each other; no VM stuck in `powering-on`; no manual step |
+| Front doors | `argo` 200 and `finance` 200 about **4 minutes after `c3` answered ssh** (503 for the last 30 s while the pods settled) |
+| After | prod, qa and cka 4 of 4 `Ready`; 12 of 12 prod pods; Argo `Synced Healthy`; both pools 3 of 3 `ONLINE`; same 3 amphorae `ALLOCATED`, load balancers `ACTIVE`/`ONLINE` (no failovers); Patroni `db1` Leader, `db2` Replica streaming, lag 0 (timeline 18: the leader changed once while the pair came back); etcd 3 of 3; monitor green; CI runner online; app reads `10.0.1.191 | f` |
+Conclusion: unattended host reboot works end to end; total outage about 9 minutes (5 min host + 4 min services). The "stuck" reboot seen earlier did not repeat; if it does, the fallback is to wait for the guest shutdown (up to `SHUTDOWN_TIMEOUT` 300 s per round) and only then `systemctl reboot --force --force` (test 5 shows that the flow after a force reboot works if the VMs were stopped first).
+
 ## History: what went wrong in test 1, and the manual repair (superseded, kept as the fallback)
 This is how the first test went and how it was repaired by hand. The root causes were found later and are fixed: `amphora-reboot-fix.md`.
 **Octavia rebuilt amphorae when its health manager started (step 13), and some of the rebuilds failed.**
