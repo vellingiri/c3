@@ -19,6 +19,7 @@ CONFIG=${DB_MONITOR_CONFIG:-/etc/default/db-monitor}
 : "${REMIND_SECONDS:=21600}"
 : "${WITNESS:=dbw1=10.0.1.120 dbw2=10.0.1.121 dbw3=10.0.1.122}"   # name=ip of each etcd witness VM (space separated)
 : "${PATRONI_PORT:=8008}"
+: "${S3_HEALTH_URL:=http://192.168.2.4:9000/health}"
 : "${STATE_FILE:=/var/lib/db-monitor/state}"
 : "${NTFY_URL:=}"
 export PGUSER PGPASSWORD PGCONNECT_TIMEOUT=5
@@ -114,6 +115,8 @@ for w in $WITNESS; do
     wdown=$((wdown+1)); problems+=("the witness VM $wname ($wip) is not answering: etcd has $((2+wtotal-wdown)) of $((2+wtotal)) voters left, automatic database failover needs a majority ($(( (2+wtotal)/2+1 )))")
   fi
 done
+# the S3 server (RustFS on `s3`) holds every Terraform state; without it nothing can be planned or applied (docs/s3-state-store.md)
+[ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' "$S3_HEALTH_URL" 2>/dev/null)" = 200 ] || problems+=("the state store (RustFS on s3, $S3_HEALTH_URL) is not answering: Terraform cannot read or write its states")
 line=$(IFS=,; echo "${summary[*]}"); line=${line//,/, }   # "db1 primary, db2 replica, lag 0 bytes"
 echo "$(date -Is) $line"
 for p in "${problems[@]:-}"; do [ -n "$p" ] && echo "PROBLEM: $p"; done

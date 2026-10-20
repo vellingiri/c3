@@ -23,7 +23,7 @@ defaults:
     pod_cidr: 192.168.0.0/16
     cluster_name: prod
     join_delay: "0"      # seconds a control-plane join waits (stagger nodes that are created together)
-    api_endpoint: ""   # name of the cluster's API load balancer once it is HA (api.prod.rdulinux.com); empty = the first controller's floating IP
+    api_endpoint: "api.prod.rdulinux.com"   # name of the cluster's API load balancer once it is HA (api.prod.rdulinux.com); empty = the first controller's floating IP
 
 nodes:
   # Migrated from v1 (adopted in place with scripts/adopt-node.sh):
@@ -43,6 +43,10 @@ nodes:
 
   # Kubernetes cluster. VM names never contain the environment; it is a tag/metadata.
   c1: { role: controller, flavor: m1.medium }
+  # control-plane nodes 2 and 3 (2026-10-20): join through api.prod.rdulinux.com by themselves and are added to the load balancer prod-api by the reconciler on c3;
+  # c3 waits 5 minutes so etcd takes one member at a time. m1.small: the host's RAM allocation limit is the constraint (docs/k8s-ha-control-plane.md).
+  c2: { role: controller_join, flavor: m1.small }
+  c3: { role: controller_join, flavor: m1.small, vars: { join_delay: "300" } }
   w1: { role: worker, flavor: m1.small }   # re-added 2026-10-20 (a fresh VM; the first w1 was retired the same day)
   w2: { role: worker, flavor: m1.small }
   w3: { role: worker, flavor: m1.small }

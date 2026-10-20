@@ -47,5 +47,7 @@ runcmd:
   - cp /etc/kubernetes/admin.conf /root/.kube/config
   - chown ubuntu:ubuntu /home/ubuntu/.kube/config
   - systemctl daemon-reload && systemctl enable --now etcd-snapshot.timer k8s-publish-join.timer
+  # resolvConf: /etc/resolv.conf (the static file with our DNS server, 192.168.2.2), not systemd-resolved's, which on a fresh VM lists only the subnet's 8.8.8.8:
+  # host-network pods (kube-proxy, calico) then cannot resolve names like api.<env>.rdulinux.com and a new node never becomes Ready (found on the cka control-plane nodes).
   # kubelet graceful node shutdown (see k8s-controller.yaml.tftpl)
-  - "sed -i 's/^shutdownGracePeriod: 0s/shutdownGracePeriod: 30s/; s/^shutdownGracePeriodCriticalPods: 0s/shutdownGracePeriodCriticalPods: 10s/' /var/lib/kubelet/config.yaml && systemctl restart kubelet"
+  - "sed -i -e 's/^shutdownGracePeriod: 0s/shutdownGracePeriod: 30s/' -e 's/^shutdownGracePeriodCriticalPods: 0s/shutdownGracePeriodCriticalPods: 10s/' -e 's#^resolvConf: .*#resolvConf: /etc/resolv.conf#' /var/lib/kubelet/config.yaml && systemctl restart kubelet"

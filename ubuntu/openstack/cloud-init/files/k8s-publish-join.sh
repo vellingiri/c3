@@ -6,6 +6,10 @@
 # Run on a control-plane node by a timer every hour (k8s-publish-join.timer). The cluster name is in /etc/k8s-cluster-name.
 # The endpoint in the printed command is the cluster's controlPlaneEndpoint (the API load balancer name once the cluster is HA).
 set -euo pipefail
+# One run at a time: every `upload-certs` makes a NEW certificate key and re-encrypts the kubeadm-certs secret with it, so two runs overlapping (the timer
+# firing while an explicit run is going) could leave a file whose key no longer opens the secret ("message authentication failed" at the joining node).
+exec 9>/run/k8s-publish-join.lock
+flock 9
 CLUSTER=$(cat /etc/k8s-cluster-name)
 DIR=${JOIN_DIR:-/nfsshare}
 export KUBECONFIG=/etc/kubernetes/admin.conf
