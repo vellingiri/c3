@@ -17,7 +17,7 @@ CONFIG=${DB_MONITOR_CONFIG:-/etc/default/db-monitor}
 : "${LAG_BYTES:=16777216}"                          # 16 MB of WAL not yet replayed
 : "${SLOT_BYTES:=1610612736}"                       # slot keeps 1.5 GB (the cap is 2 GB, then the replica must be rebuilt)
 : "${REMIND_SECONDS:=21600}"
-: "${WITNESS:=db-witness=10.0.1.120}"                   # name=ip of the etcd tie-breaker VM
+: "${WITNESS:=dbw=10.0.1.120}"                   # name=ip of the etcd tie-breaker VM
 : "${PATRONI_PORT:=8008}"
 : "${STATE_FILE:=/var/lib/db-monitor/state}"
 : "${NTFY_URL:=}"

@@ -32,7 +32,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 | `argo` | 192.168.2.113 | VIP 10.0.1.56 | Argo CD, served by Octavia `argo-lb` |
 | `db1` | 192.168.2.124 | 10.0.1.191 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **primary**) (m1.small) |
 | `db2` | 192.168.2.135 | 10.0.1.69 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **replica**) (m1.small) |
-| `db-witness` | 192.168.2.104 | 10.0.1.120 | third etcd voter only, no data (m1.tiny) |
+| `dbw` | 192.168.2.104 | 10.0.1.120 | third etcd voter only, no data (m1.tiny) |
 | `db` | 192.168.2.124 (TTL 60) | n/a | alias of the current primary; edit `infra.yaml` to fail over |
 | `runner` | 192.168.2.144 | 10.0.1.47 | GitHub Actions self-hosted runner + the replication monitor (m1.large) |
 | `@`, `www`, `rdu` | 13.140.58.46 | n/a | public address (not a lab VM) |
@@ -93,7 +93,7 @@ after `db2` and `argo-lb`. A new `m1.small` is 4 GB, an `m1.tiny` 2 GB, an ampho
 ## Data protection map
 | What | Protection | Proof / doc |
 |---|---|---|
-| Finance database | hourly and daily `pg_dump` to NFS; streaming replica with **automatic failover** (Patroni, 3-member etcd; losing any one of db1/db2/db-witness is survived, losing two is not); alerts on replica, Patroni and witness health | `finance-db-restore.md`, `db-ha-patroni.md` |
+| Finance database | hourly and daily `pg_dump` to NFS; streaming replica with **automatic failover** (Patroni, 3-member etcd; losing any one of db1/db2/dbw is survived, losing two is not); alerts on replica, Patroni and witness health | `finance-db-restore.md`, `db-ha-patroni.md` |
 | Kubernetes state | etcd snapshot timer on each controller (`/var/backups/etcd`, copied to NFS) | `etcd-restore-rehearsal.md` |
 | Files (uploads, logs) | NFS on `repo`; a tarball copy on `backup` before risky work | `prod-k8s-rebuild.md` |
 | Terraform state | S3 (MinIO) bucket with locking | `../README.md` |

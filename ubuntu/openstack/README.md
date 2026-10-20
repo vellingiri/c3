@@ -13,7 +13,7 @@ cloud-init/*.tftpl       reusable cloud-init parts, composed per role
 scripts/adopt-node.sh    bring an existing VM under Terraform without recreating it
 scripts/k8s-copy-between.sh  copy k8s objects between clusters through two local kubeconfigs (secrets stay in the pipe)
 scripts/db-replica-setup.sh  make db2 a streaming replica of db1 (re-runnable);  scripts/db-replication-status.sh checks it
-scripts/db-ha-etcd.sh, scripts/db-ha-patroni.sh  etcd (db1, db2, db-witness) and Patroni for automatic database failover (docs/db-ha-patroni.md)
+scripts/db-ha-etcd.sh, scripts/db-ha-patroni.sh  etcd (db1, db2, dbw) and Patroni for automatic database failover (docs/db-ha-patroni.md)
 scripts/install-db-monitor.sh  install the replication monitor + ntfy alerts on the runner (scripts/db-replication-monitor.sh)
 docs/                    architecture, runbooks and design records (index: docs/README.md)
 CHANGELOG.md             release notes for the infrastructure

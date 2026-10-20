@@ -1,7 +1,7 @@
 # Replaced VMs failed with "Port ... is still in use" (fixed 2026-10-20)
 
 ## Symptom
-`terraform apply -replace='module.node["db-witness"].openstack_compute_instance_v2.this'` destroyed the VM, then failed to create the new one:
+`terraform apply -replace='module.node["dbw"].openstack_compute_instance_v2.this'` destroyed the VM, then failed to create the new one:
 `409 Port 575d33f2-... is still in use`. The port belongs to Terraform (a separate resource), so it survives the replace, but it still said
 `device_id = <the deleted server>`. Every VM replace would have hit this.
 

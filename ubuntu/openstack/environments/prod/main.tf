@@ -24,7 +24,7 @@ locals {
   }
 }
 
-# The database HA group (db1, db2 and the db-witness): every member needs the list of members and the shared passwords to set itself up.
+# The database HA group (db1, db2 and the witness dbw): every member needs the list of members and the shared passwords to set itself up.
 # Only these roles get them in their user data.
 locals {
   db_ha_roles = ["database", "witness"]
@@ -33,6 +33,7 @@ locals {
   ])
   db_ha_vars = {
     ha_members              = local.db_ha_members
+    ha_witness              = join(",", [for name, n in local.nodes : name if n.role == "witness"])
     ha_postgres_password    = var.db_ha_postgres_password
     ha_replication_password = var.db_ha_replication_password
     ha_rest_password        = var.db_ha_rest_password

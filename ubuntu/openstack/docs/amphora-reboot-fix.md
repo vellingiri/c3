@@ -36,7 +36,7 @@ A hard reboot happened to work because the hot-plugged NIC kept its old name (`e
 | Same, **final image**, Argo's amphora, 3 rounds in a row | VIP back every time (agent up after about 33 s) |
 | Final image, each of finance's two amphorae stopped and started while probing the door every second | both came back with `eth1`; **146 requests, 1 failed** (about a second while keepalived moved the VIP to the other amphora) |
 | Deliberately wrong router entries (Argo's VIP set to a bogus MAC; finance's set to the other amphora) | healed by the watcher in **32 s** and **24 s** |
-| **Plain host reboot with all 17 VMs running (before `db-witness` was added; 18 now), no manual step** (first try of the final design) | 17 of 17 guests running about 2 minutes after `c3` answered ssh; both doors 200 about 3 minutes after. But one amphora was flagged `ERROR` by the health manager (it booted a little after the others, so only one was stale and the threshold of 2 did not protect it) |
+| **Plain host reboot with all 17 VMs running (before `dbw` was added; 18 now), no manual step** (first try of the final design) | 17 of 17 guests running about 2 minutes after `c3` answered ssh; both doors 200 about 3 minutes after. But one amphora was flagged `ERROR` by the health manager (it booted a little after the others, so only one was stale and the threshold of 2 did not protect it) |
 | Same, after adding `heartbeat_timeout = 900` | **0 failovers, the same three amphora IDs, all `ALLOCATED`, both load balancers `ACTIVE`/`ONLINE`, both doors 200**; `c3` back in 172 s; the watcher corrected the finance VIP within 30 s (the pair had re-elected a master on boot) |
 
 ## Check it at any time

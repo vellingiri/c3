@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Create environments/prod/secrets.auto.tfvars: the passwords the database HA group (Patroni, replication) and its notifications use.
-# Terraform puts them into the cloud-init of db1, db2 and db-witness, so a rebuilt node needs nothing typed by hand.
+# Terraform puts them into the cloud-init of db1, db2 and dbw, so a rebuilt node needs nothing typed by hand.
 #   scripts/db-ha-secrets.sh            write the file if it does not exist yet (does nothing if it does)
 #   scripts/db-ha-secrets.sh --check    only say whether it exists
 # Values: the ones the RUNNING cluster already uses (read from /etc/patroni/config.yml on db1 / db2 over ssh), so nothing has to be rotated;

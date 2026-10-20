@@ -2,7 +2,7 @@
 # First-boot setup of one node of the database HA group (docs/db-ha-patroni.md). Installed by cloud-init as /usr/local/sbin/db-ha-node and run once.
 #
 #   role "database": etcd member + PostgreSQL 16 under Patroni      (db1, db2)
-#   role "witness":  etcd member only, the third voter              (db-witness)
+#   role "witness":  etcd member only, the third voter              (dbw)
 #
 # Input, written by cloud-init (Terraform renders it): /etc/db-ha/node.env (ROLE, MEMBERS="name=ip,...") and /etc/db-ha/secrets (0600).
 # The same script builds a brand-new group and replaces one lost machine of a running group; it decides by looking at what answers:
@@ -140,7 +140,7 @@ if [ "$ROLE" = database ]; then
   [ -f "$CONF/postgresql.base.conf" ] || cp -a "$CONF/postgresql.conf" "$CONF/postgresql.base.conf"
   find "$DATA" -mindepth 1 -delete          # first boot: whatever the package created; Patroni fills it (initdb or copy of the leader)
   HBA_POSTGRES=""
-  for ip in $(echo "$MEMBERS" | tr ',' '\n' | grep -v '^db-witness=' | awk -F= '{print $2}'); do
+  for ip in $(echo "$MEMBERS" | tr ',' '\n' | grep -v "^${WITNESS}=" | awk -F= '{print $2}'); do
     HBA_POSTGRES="$HBA_POSTGRES
     - host all postgres $ip/32 scram-sha-256"
   done

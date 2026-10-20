@@ -77,7 +77,7 @@ Worked example (2026-10-20, `w1` retired): pools edited, drain with 81 probe che
   The application tracks `https://github.com/vellingiri/finance.git`, path `k8s`, branch `develop`. A saved copy of the original is in `~/finance-argo-application.prod.json` on your Mac.
 
 ## Kubeconfigs
-`~/.kube/prod` and `~/.kube/qa` are separate files (backups from before the rebuild: `prod.bak-old-cluster`, `qa.bak-old-c2`). Always pass `--kubeconfig` (or `--context`):
+`~/.kube/prod`, `~/.kube/qa` and `~/.kube/cka` (practice cluster) are separate files, all listed in `KUBECONFIG` in `~/.bash_profile` (backups from before the rebuild: `prod.bak-old-cluster`, `qa.bak-old-c2`). Always pass `--kubeconfig` (or `--context`):
 a tool like `ktx` leaves `current-context` pointing at the other cluster in both files. After a cluster rebuild the CA changes: fetch `~/.kube/config` from `c1`
 (`ssh c1.prod cat ~/.kube/config`) and rename the entries. The GitHub runner has its own kubeconfig at `/home/runner/.kube/config`; after a rebuild it must be replaced too
 (CI then fails with `x509: certificate signed by unknown authority` until it is).

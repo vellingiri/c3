@@ -30,7 +30,7 @@ BACKUP=/root/db-ha-backup-$(date +%Y%m%d)
 
 ip_of() { ssh "$1" "hostname -I | awk '{print \$1}'"; }
 pgq() { ssh "$1" "sudo -u postgres psql -X -qAt -v ON_ERROR_STOP=1 -c \"$2\""; }
-etcd_eps() { local e="" h; for h in db1 db2 db-witness; do e+="$(ip_of "$h"):2379,"; done; echo "${e%,}"; }
+etcd_eps() { local e="" h; for h in db1 db2 dbw; do e+="$(ip_of "$h"):2379,"; done; echo "${e%,}"; }
 pctl() { ssh "$1" "sudo -u postgres patronictl -c $CFG $2"; }
 
 need_etcd() {

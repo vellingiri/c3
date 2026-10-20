@@ -8,6 +8,7 @@ write_files:
     content: |
       ROLE=${role}
       MEMBERS="${ha_members}"
+      WITNESS="${ha_witness}"
   - path: /etc/db-ha/secrets
     permissions: '0600'
     content: |

@@ -8,7 +8,7 @@ Commands you need every week, and a "is everything healthy?" sweep. Details live
 |---|---|---|
 | `ssh c1` `ssh w1` ... `ssh w3` | `<name>.prod.rdulinux.com` | prod Kubernetes nodes, user root, key `id_ed25519` |
 | `ssh c1.prod` `ssh w2.qa` | `<name>.<env>.rdulinux.com` | any VM, either environment (`w1` exists in both: `ssh w1.prod`, `ssh w1.qa`) |
-| `ssh db1` `ssh db2` `ssh db-witness` | the two database VMs and the etcd tie-breaker VM | key `id_ed25519.c3`. On db1/db2: `patronictl list` |
+| `ssh db1` `ssh db2` `ssh dbw` | the two database VMs and the etcd tie-breaker VM | key `id_ed25519.c3`. On db1/db2: `patronictl list` |
 | `ssh db` | whoever `db.rdulinux.com` points at (the primary) | after a failover your Mac may cache the old answer: `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` |
 | `ssh runner` `ssh repo` `ssh backup` `ssh c3` | shared services and the cloud host | key `id_ed25519.c3` |
 `/opt/c3/bin/mssh host1 host2 ...` opens synchronized tmux panes (type once, runs on all).
@@ -42,6 +42,7 @@ Never `apply` in `../archive/*` (retired). `terraform plan` clean on all three s
 ```bash
 k() { kubectl --kubeconfig ~/.kube/prod -n finance "$@"; }            # use a function: K="kubectl ..." breaks in zsh
 kubectl --kubeconfig ~/.kube/prod get nodes                           # prod: c1 w1 w2 w3
+kubectl --kubeconfig ~/.kube/cka get nodes                            # cka: c1 w1 w2 w3 (practice cluster, docs/cka-cluster.md)
 kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w1 w2 w3 (spare)
 ```
 

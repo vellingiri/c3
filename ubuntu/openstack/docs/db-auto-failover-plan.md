@@ -45,7 +45,7 @@ switchover with it in place before trusting it. Rollback: put the single IP back
         \                     /
          etcd (db1)  etcd (db2)  etcd (witness)   <- 3 members = survives the loss of any one
 ```
-- **Witness VM `db-witness`:** new `m1.tiny` (1 vCPU, 2 GB, 10 GB disk; the only small flavour) running **only etcd**. Cheaper and safer than putting an etcd
+- **Witness VM `dbw`:** new `m1.tiny` (1 vCPU, 2 GB, 10 GB disk; the only small flavour) running **only etcd**. Cheaper and safer than putting an etcd
   member on the CI `runner` (CI jobs can starve etcd of disk and CPU, which makes leader elections flap). The runner is the fallback if capacity is a problem.
 - **Same Postgres 16 and data directories** on `db1`/`db2`; Patroni takes over starting Postgres, so the `postgresql@16-main` units are disabled.
 - **Settings to decide** (defaults in brackets): leader TTL 30 s, `loop_wait` 10 s, `retry_timeout` 10 s (failover in roughly 30 to 45 s);
@@ -58,7 +58,7 @@ switchover with it in place before trusting it. Rollback: put the single IP back
 
 ### Migration order (existing data, no rebuild of the database)
 1. Take a fresh backup and confirm the restore doc still passes. Do Phase 0 first so the app does not care about restarts.
-2. Create `db-witness` (Terraform, `nodes.yaml`) and form a 3-member etcd cluster (`db1`, `db2`, `db-witness`). Test it with `etcdctl endpoint health`
+2. Create `dbw` (Terraform, `nodes.yaml`) and form a 3-member etcd cluster (`db1`, `db2`, `dbw`). Test it with `etcdctl endpoint health`
    and by stopping one member.
 3. **Primary first:** install Patroni on `db1`, stop `postgresql@16-main`, start Patroni on the same data directory so it claims the leader key.
    This restarts Postgres: **about 10 to 30 s of failed writes.** Never start Patroni on the replica first: with no leader key it would promote itself.

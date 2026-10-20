@@ -34,8 +34,11 @@ Update this file in the same commit as any change, and list anything done **by h
 - `w4` and `w5` retired: VMs removed through Terraform, then their load balancer pool members and Kubernetes nodes deleted. **Prod now has 3 workers, no spare node**: draining one blocks until it is back (`docs/k8s-operations.md`). VM count 16.
 - The whole database group was rebuilt from nothing on three scratch VMs (deleted afterwards); it found and fixed a startup race in `db-ha-node.sh`.
 
-### CKA practice cluster (defined, not built)
+### CKA practice cluster (built and verified)
 - New `environments/cka` (1 controller + 3 workers, m1.small, `cka.rdulinux.com`) and the zone `cka.rdulinux.com.` in `infra/infra.yaml`. Build, use and teardown: `docs/cka-cluster.md`. Apply `infra` first (DNS zone), then `environments/cka`.
+
+### `db-witness` renamed `dbw`
+- Short name like the other VMs (`db1`, `c1`, `w1`). In `nodes.yaml` the key changed, so Terraform replaces the VM (new VM, same address 10.0.1.120): run `terraform apply` in `environments/prod`; if the first apply stops with an IP-in-use error on the new port (old and new are created at the same time), run it a second time. The new VM joins etcd by itself and replaces the old member (same address). The monitor on the runner (`WITNESS` default) and `~/.ssh/config` (`Host dbw`) were updated. Older entries of this file still say `db-witness`.
 
 ### Spare VM removed
 - `learn` (QA, m1.small) removed from `environments/qa/nodes.yaml`; the VM, its port, floating IP and DNS records go away with `terraform apply` in `environments/qa`. VM count 15 after that.
