@@ -32,7 +32,7 @@ outputs through its remote state (`openstack/infra/terraform.tfstate`).
   the instance, port and floating IP (`openstack server list --tags qa`).
 - Each environment has its own DNS zone, set by `domain` in its `nodes.yaml`: prod nodes live
   in `prod.rdulinux.com` (`c1.prod.rdulinux.com`), qa in `qa.rdulinux.com` (`c1.qa.rdulinux.com`).
-  Zones are listed in `infra/infra.yaml` (`dns.extra_zones`). Shared services (`db`, `runner`)
+  Zones are listed in `infra/infra.yaml` (`dns.extra_zones`). Shared services (`db1`, `db2`, `runner`)
   override `domain: rdulinux.com`. `db1`/`db2` are the database hosts; `db.rdulinux.com` is an alias for the current primary (infra.yaml, TTL 60 s).
   OpenStack server names can repeat across environments; use the tag or the ID to tell them apart.
 - Per-cluster join info lives in `/nfsshare/join-<cluster_name>.sh`.
