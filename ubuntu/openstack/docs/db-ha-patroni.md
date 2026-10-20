@@ -127,5 +127,9 @@ Watch with `patronictl list`; the new member shows `creating replica`, then `str
 restore the data (`finance-db-restore.md`, roles `financeapp` and `monitor` included).
 
 Existing VMs are untouched (user data is ignored after first boot); `scripts/db-ha-etcd.sh` and `db-ha-patroni.sh` are the record of how they were adopted.
-Status: written 2026-10-20, **not yet proven on a real replacement**; the first test is replacing `db-witness`, then `db2`.
+**Proven 2026-10-20 on live prod, both with one `terraform apply -replace` and nothing else:**
+- `db-witness` replaced: the new VM found the running etcd cluster, removed the dead member's entry, joined, 3 of 3 healthy in about 2 minutes. App untouched.
+- `db2` replaced (new VM, same address): etcd joined, Patroni copied the leader and became `Replica streaming`, lag 0, in about 2 minutes (VM up 16:53:46, done 16:54:32). Same 85 tables and the roles `financeapp`/`monitor`/`replicator` as `db1`; monitor green; app path unchanged; front door 200.
+- A first attempt at the witness replace failed on a Neutron policy problem, fixed on `c3` (`port-unbind-fix.md`).
+Not yet exercised: building the whole group from nothing (both database VMs and the witness new at once).
 Still outside Terraform: the monitor copy on the runner (`scripts/install-db-monitor.sh`).
