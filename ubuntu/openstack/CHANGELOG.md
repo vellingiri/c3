@@ -34,6 +34,9 @@ Update this file in the same commit as any change, and list anything done **by h
 - `w4` and `w5` retired: VMs removed through Terraform, then their load balancer pool members and Kubernetes nodes deleted. **Prod now has 3 workers, no spare node**: draining one blocks until it is back (`docs/k8s-operations.md`). VM count 16.
 - The whole database group was rebuilt from nothing on three scratch VMs (deleted afterwards); it found and fixed a startup race in `db-ha-node.sh`.
 
+### Spare VM removed
+- `learn` (QA, m1.small) removed from `environments/qa/nodes.yaml`; the VM, its port, floating IP and DNS records go away with `terraform apply` in `environments/qa`. VM count 15 after that.
+
 ### Limits
 Asynchronous replication (a hard failure can lose the last seconds of writes); losing two of the three etcd machines stops automatic failover.
 

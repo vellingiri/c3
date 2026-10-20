@@ -24,4 +24,4 @@ nodes:
   w1: { role: worker, flavor: m1.small }
   w2: { role: worker, flavor: m1.small }
   w3: { role: worker, flavor: m1.small }
-  learn: { role: learn, flavor: m1.small }
+  # learn (spare test VM) was removed 2026-10-20 to free capacity.
