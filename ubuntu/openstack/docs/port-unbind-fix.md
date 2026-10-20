@@ -27,6 +27,15 @@ Clear the stale binding on the port (only after confirming the server is gone) a
 `python3 -c "import openstack; c=openstack.connect(); c.network.update_port('<port id>', device_id='', device_owner='')"` on `c3`
 (the CLI's `openstack port set --device ''` does **not** clear it).
 
+## Second trap: a VM adopted with a port that Nova had created (`db1`, 2026-10-20)
+Replacing `db1` destroyed the VM, and the create then failed with `Could not find any matching port 0513f21a-...`. `db1` came from the pre-Terraform
+VM `db`, whose port Nova itself had made, so Nova deleted the port together with the VM while Terraform's state still listed it.
+Fix, no `-replace` needed once the VM is gone: **plain `terraform apply`**. It sees the port missing, recreates `db1-port` at the pinned `10.0.1.191`,
+the instance and the floating IP link. From then on `db1` has a Terraform-owned port like the others.
+Audit afterwards (every VM port of prod and qa): all are named `<vm>-port` and tagged with the environment, i.e. Terraform-owned; only the Octavia amphorae
+have Nova/Octavia-made ports, and those are not Terraform's. So this cannot happen again for the database group; if a plain `apply` after a failed replace is
+ever needed, the symptom is exactly that error message.
+
 ## Other things learned in the same session (OpenStack)
 - **A `SHUTOFF` server still reserves its memory in Nova.** Stopping QA VMs to make room for scratch VMs frees nothing; only deleting does. Capacity
   needed for a rehearsal must be found by deleting something or raising `ram_allocation_ratio` (still 1.1).
