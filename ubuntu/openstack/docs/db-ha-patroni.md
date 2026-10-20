@@ -9,15 +9,15 @@ background document). Now **Patroni** on `db1` and `db2` decides who is primary,
 |---|---|---|
 | PostgreSQL 16 | `db1` (10.0.1.191), `db2` (10.0.1.69) | one primary (read-write), one streaming replica. **Run by Patroni**; `postgresql@16-main` is masked on both |
 | Patroni 3.2.2 | `db1`, `db2` | keeps a leader key in etcd, promotes / demotes / re-attaches PostgreSQL. Config `/etc/patroni/config.yml` (root/postgres only, holds passwords) |
-| etcd 3.4 (3 members) | `db1`, `db2`, **`dbw`** (10.0.1.120, m1.tiny) | the shared notebook that says who is leader. Three voters means any single machine can be lost and the other two still agree |
-| `dbw` | prod VM, Terraform role `witness` | does nothing except run etcd (tie-breaker). Holds no data |
+| etcd 3.4 (**5 members** since 2026-10-20) | `db1`, `db2` and the three witnesses **`dbw1`** (10.0.1.120), **`dbw2`** (10.0.1.121), **`dbw3`** (10.0.1.122), all m1.tiny | the shared notebook that says who is leader. With five voters **any two machines** can be lost and the other three still agree (a majority is 3 of 5) |
+| `dbw1` | prod VM, Terraform role `witness` | does nothing except run etcd (tie-breaker). Holds no data |
 | App connection | `DATABASE_URL` lists both DB hosts with `target_session_attrs=read-write` | the app finds the writable one itself; no DNS change needed |
 | `db.rdulinux.com` | still a DNS alias for the *original* primary | **not used by the app any more and not updated on failover**; do not rely on it |
 
 Settings that matter: leader key TTL 30 s, loop 10 s, `maximum_lag_on_failover` 1 MB (a replica further behind is never promoted),
 `failsafe_mode` on, `use_pg_rewind` on (an old primary rejoins as a replica by itself), replication **synchronous** (`synchronous_mode: true`, `synchronous_node_count: 1`, not strict; switched on 2026-10-20, see "Synchronous replication").
 
-Security: etcd has no TLS or login, so an nftables table `etcd_guard` on each of the three hosts allows ports 2379/2380 only from the three members
+Security: etcd has no TLS or login, so an nftables table `etcd_guard` on every member allows ports 2379/2380 only from the five members
 and localhost, and Patroni's REST port 8008 only from 10.0.1.0/24 (writes need the `patroni` user/password from `config.yml`).
 
 ## Look at it (everyday)
@@ -32,7 +32,7 @@ scripts/db-ha-patroni.sh status  # from the Mac: Patroni on both nodes
 ```
 
 Healthy is: one `Leader running`, one `Replica streaming`, `Lag in MB` 0, both on the same `TL`.
-The runner's monitor (`db-replication-monitor`, every few minutes, alerts go to ntfy) checks all of that plus `dbw` reachable and the
+The runner's monitor (`db-replication-monitor`, every few minutes, alerts go to ntfy) checks all of that plus `dbw1` reachable and the
 etcd view not stale. Patroni also sends an ntfy message on every role change (`/usr/local/bin/patroni-notify`).
 
 ## What happens by itself
@@ -42,7 +42,7 @@ etcd view not stale. Patroni also sends an ntfy message on every role change (`/
 | Primary VM crashes / powered off | after the 30 s lease runs out, the replica is promoted. Measured: **~40 s** to a new primary; the app has errors for ~36 s and then recovers **without a restart** |
 | PostgreSQL process killed | Patroni restarts it, about 5 s |
 | Old primary comes back | it sees it lost the lease, `pg_rewind`s and follows the new primary as a replica. Nobody has to do anything |
-| `dbw` lost | nothing visible (2 of 3 etcd voters remain). The monitor alerts |
+| `dbw1` lost | nothing visible (2 of 3 etcd voters remain). The monitor alerts |
 | Network partition of the primary from the others | the primary demotes itself, the other side promotes. Measured: no split brain (85 samples), ~12 s of failed writes |
 
 ## Planned work
@@ -63,13 +63,29 @@ Change PostgreSQL settings with `patronictl edit-config` (cluster-wide, stored i
 | Symptom | Do |
 |---|---|
 | Replica `stopped` / lagging after a long outage | `ssh db1 patronictl reinit finance-db <replica>` rebuilds it from the leader (data copy; the app is not affected) |
-| No leader, both nodes say "demoted" / "failsafe" | etcd lost quorum (two of three voters down, usually `dbw` **and** one DB). Bring the missing VM back first (`openstack server start`); Patroni recovers on its own. Do not promote by hand |
+| No leader, both nodes say "demoted" / "failsafe" | etcd lost its majority (**three or more of the five** voters down; two are survived). Bring the missing VMs back first (`openstack server start`, or `terraform apply -replace=...` for a dead one); Patroni recovers on its own. Only if they cannot be brought back, use "Emergency: no etcd majority" below |
 | Need to force a failover while the leader is alive | `patronictl failover finance-db --candidate db2 --force` |
 | App returns 503 "service busy" for more than ~1 minute after a failover | check `patronictl list` first. If a leader exists, restart the backend pods: `kubectl -n finance rollout restart deploy/backend` (prod kubeconfig) |
 | Monitor says "Patroni on dbX is not answering" | `ssh dbX systemctl status patroni`, `journalctl -u patroni -n 50` |
 | Replace a failed DB node | create the VM from Terraform, install etcd/Patroni with `scripts/db-ha-patroni.sh prepare`, remove the dead member (`etcdctl member remove`), add the new one, then `patronictl reinit` |
 | Replace the witness | create a new `witness` VM, `etcdctl member remove <old id>` / `member add`, start etcd with `ETCD_INITIAL_CLUSTER_STATE=existing` (scripts/db-ha-etcd.sh is for first install only and refuses to run over an existing cluster) |
 | Go back to plain PostgreSQL | `scripts/db-ha-patroni.sh rollback` (read it first; it stops Patroni, unmasks `postgresql@16-main`, restores the Debian config copies in `/root/db-ha-backup-20261020`) |
+
+## Five etcd members (since 2026-10-20)
+`dbw2` and `dbw3` were added to `environments/prod/nodes.yaml` (role `witness`, m1.tiny, fixed addresses). They build themselves from cloud-init (`cloud-init/files/db-ha-node.sh`): each found the running etcd cluster and joined with `member add`
+(two joining at once is handled: the second waits and retries while etcd says `unhealthy cluster`). Steps done for the three machines that already existed, scripted in `scripts/db-ha-etcd-grow.sh`: `firewall` before the apply
+(the new addresses must reach etcd on the existing members), `patroni-hosts` after the join (Patroni's `etcd3.hosts` lists all five so it can still find the cluster if three of the old addresses are down). The monitor
+(`scripts/db-replication-monitor.sh`, runner) checks every witness and says how many voters are left. A database built from the current cloud-init has the five addresses from the start.
+**Drill (2026-10-20, live prod, sync probe writing):** the witness `dbw1` and the **primary `db2` powered off together** (the scenario that used to stop automatic failover): `db1` became Leader after **35 s**, the highest acknowledged id (730) equals `max(id)` and
+`count(*)` on the new primary (730 / 730), one client error. `db2` and `dbw1` were started again and rejoined (`db2` as `Sync Standby`).
+
+## Emergency: no etcd majority (three or more voters lost and not coming back)
+Only when the VMs cannot be restored and the database must be written NOW. Patroni will not promote without a majority, on purpose (that is what prevents two primaries).
+1. Be sure the old primary is really dead or isolated (powered off in `openstack server list`). Two writable copies would diverge.
+2. On the survivor: `systemctl stop patroni` (PostgreSQL keeps running as a standby), then promote it: `sudo -u postgres /usr/lib/postgresql/16/bin/pg_ctl promote -D /var/lib/postgresql/16/main`. It is now a plain primary; the app's two-host URL finds it.
+3. Rebuild the group: create the missing VMs (`terraform apply`), make sure `/patroni/` data in etcd is not stale: on a fresh etcd the new cluster key does not exist, Patroni on the survivor (start it again with `systemctl start patroni`) sees a running primary without a leader key and takes the leader lock; the other database is rebuilt with `patronictl reinit finance-db <name>` (copy of the leader).
+4. Check `patronictl list`, `db-ha-etcd.sh status`, the monitor, and take a fresh backup. Record what happened in `CHANGELOG.md`.
+This path was reasoned, not drilled; prefer bringing VMs back.
 
 ## Synchronous replication (since 2026-10-20)
 `patronictl edit-config -s synchronous_mode=true -s synchronous_node_count=1` on the live pair, and the same keys in `cloud-init/files/db-ha-node.sh` for new clusters. `patronictl list` then shows the replica as **`Sync Standby`**
@@ -86,7 +102,7 @@ Notes: the app's `DB_COMMAND_TIMEOUT` is 30 s, so requests that commit during th
 ## The limits you accepted
 
 - **Replication is synchronous but not strict** (see "Synchronous replication"): no acknowledged write is lost when the primary dies; the price is a write pause of about 35 s when the standby disappears, and during a standby outage the pair is asynchronous again until it is back.
-- **Two machines lost at once** (witness plus one DB) means no majority: no automatic failover, and the surviving DB demotes. Fix by bringing a VM back.
+- **Three machines lost at once** (of db1, db2, dbw1, dbw2, dbw3) means no majority: no automatic failover, and a surviving database demotes. Any two are survived (drilled). Fix by bringing VMs back, or the emergency procedure below. (Everything runs on one host, `c3`; a host loss takes all five voters at once.)
 - **Memory:** `ram_allocation_ratio` on `c3` was raised from 1.1 to 1.2 on 2026-10-20 (see `port-unbind-fix.md`, section on capacity), giving about 9 GB of headroom for rebuilds of `finance-lb` (~4 GB) and test VMs.
   from 1.1 to 1.2 is possible but not done (your decision).
 - The monitor cannot ask etcd directly (firewall); it uses Patroni's `dcs_last_seen` and a TCP check of the witness.
@@ -109,7 +125,7 @@ promoted replica was never tried (every request returned 503 until the old prima
 | 2 | Kill the PostgreSQL process on the primary | Patroni restarted it in ~5 s |
 | 3 | Primary VM powered off (sysrq) | new primary after ~40 s; app errors ~36 s then self-recovered; no data loss; old primary rejoined as replica after `openstack server start` (first attempt failed the app side, fixed as above, then repeated and passed) |
 | 4 | Network partition of the primary (nft `drill_partition`) | no split brain in 85 samples; ~12 s of failed writes. (The first run was invalid, the rule had a syntax error; it was redone and the block verified before measuring.) |
-| 5 | `dbw` powered off | no effect on the app; switchover still worked with 2 of 3 etcd members; the monitor alerted |
+| 5 | `dbw1` powered off | no effect on the app; switchover still worked with 2 of 3 etcd members; the monitor alerted |
 
 Final state after the drills: `db1` Leader, `db2` Replica, TL 14, 3 of 3 etcd healthy.
 
@@ -122,7 +138,7 @@ Rehearsed on a scratch cluster first; lessons are in the header of `scripts/db-h
 `custom_conf` must point at a copy of the original Debian config (`postgresql.base.conf`, otherwise Patroni overwrites `postgresql.conf` and PostgreSQL recurses), and the `postgres` password must exist before the first start.
 
 Scripts: `scripts/db-ha-etcd.sh` (install/status), `scripts/db-ha-patroni.sh` (prepare, adopt-primary, adopt-replica, status, notify, rollback), `scripts/db-replication-monitor.sh`.
-Terraform: role `witness` (`modules/node`, `cloud-init/witness.yaml.tftpl`), VM `dbw` in `environments/prod/nodes.yaml`.
+Terraform: role `witness` (`modules/node`, `cloud-init/witness.yaml.tftpl`), VM `dbw1` in `environments/prod/nodes.yaml`.
 
 ## Built by Terraform (no manual work for a new or replaced node)
 
@@ -139,7 +155,7 @@ restore the data (`finance-db-restore.md`, roles `financeapp` and `monitor` incl
 
 Existing VMs are untouched (user data is ignored after first boot); `scripts/db-ha-etcd.sh` and `db-ha-patroni.sh` are the record of how they were adopted.
 **Proven 2026-10-20 on live prod, both with one `terraform apply -replace` and nothing else:**
-- `dbw` replaced: the new VM found the running etcd cluster, removed the dead member's entry, joined, 3 of 3 healthy in about 2 minutes. App untouched.
+- `dbw1` replaced: the new VM found the running etcd cluster, removed the dead member's entry, joined, 3 of 3 healthy in about 2 minutes. App untouched.
 - `db2` replaced (new VM, same address): etcd joined, Patroni copied the leader and became `Replica streaming`, lag 0, in about 2 minutes (VM up 16:53:46, done 16:54:32). Same 85 tables and the roles `financeapp`/`monitor`/`replicator` as `db1`; monitor green; app path unchanged; front door 200.
 - A first attempt at the witness replace failed on a Neutron policy problem, fixed on `c3` (`port-unbind-fix.md`).
 - `db1` replaced after a planned switchover to `db2`: same result (replica streaming, lag 0, about 2 minutes after the VM was created). It needed a plain `terraform apply` first because of an old Nova-made port (`port-unbind-fix.md`). `db2` is now the Leader.

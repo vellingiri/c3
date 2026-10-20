@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build (or check) the 3-member etcd cluster that Patroni uses to decide which database is primary.
-#   scripts/db-ha-etcd.sh install      install and start etcd on db1, db2 and dbw (first time: forms a NEW cluster)
+#   scripts/db-ha-etcd.sh install      install and start etcd on db1, db2 and dbw1 (first time: forms a NEW cluster)
 #   scripts/db-ha-etcd.sh status       member list and health
 # Run from your Mac (ssh as root to the three hosts). Design and reasons: docs/db-ha-patroni.md.
 #
@@ -9,7 +9,7 @@
 # "install" refuses to run when a cluster already exists on a host (a data directory is present): re-forming would lose the leader key.
 set -euo pipefail
 
-HOSTS=(db1 db2 dbw dbw2 dbw3)
+HOSTS=(db1 db2 dbw1 dbw2 dbw3)
 TOKEN=finance-db-ha
 
 ip_of() { ssh "$1" "hostname -I | awk '{print \$1}'"; }

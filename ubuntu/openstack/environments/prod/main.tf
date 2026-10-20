@@ -24,7 +24,7 @@ locals {
   }
 }
 
-# The database HA group (db1, db2 and the witness dbw): every member needs the list of members and the shared passwords to set itself up.
+# The database HA group (db1, db2 and the witness dbw1): every member needs the list of members and the shared passwords to set itself up.
 # Only these roles get them in their user data.
 locals {
   db_ha_roles = ["database", "witness"]

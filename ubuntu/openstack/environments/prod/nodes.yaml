@@ -32,9 +32,9 @@ nodes:
   # db1 and db2 run PostgreSQL under Patroni (docs/db-ha-patroni.md); a rebuilt one sets itself up from cloud-init and joins the running pair.
   # `ip` is required for database and witness nodes (the group is built from these addresses; same value the VM already has).
   db2: { role: database, ip: 10.0.1.69, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
-  # dbw (was db-witness until 2026-10-20): third voter (etcd only) so the database pair can fail over automatically without split brain.
-  dbw: { role: witness, ip: 10.0.1.120, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
-  # dbw2, dbw3: two more witnesses (2026-10-20): 5 etcd voters, so any TWO machines of db1/db2/dbw/dbw2/dbw3 may be down and the database still fails over by itself.
+  # dbw1 (was db-witness until 2026-10-20): third voter (etcd only) so the database pair can fail over automatically without split brain.
+  dbw1: { role: witness, ip: 10.0.1.120, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
+  # dbw2, dbw3: two more witnesses (2026-10-20): 5 etcd voters, so any TWO machines of db1/db2/dbw1/dbw2/dbw3 may be down and the database still fails over by itself.
   dbw2: { role: witness, ip: 10.0.1.121, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
   dbw3: { role: witness, ip: 10.0.1.122, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
   # runner has default + k8s SGs, which equal the defaults, so no override needed.

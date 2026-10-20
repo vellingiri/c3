@@ -2,7 +2,7 @@
 # First-boot setup of one node of the database HA group (docs/db-ha-patroni.md). Installed by cloud-init as /usr/local/sbin/db-ha-node and run once.
 #
 #   role "database": etcd member + PostgreSQL 16 under Patroni      (db1, db2)
-#   role "witness":  etcd member only, the third voter              (dbw)
+#   role "witness":  etcd member only, the third voter              (dbw1)
 #
 # Input, written by cloud-init (Terraform renders it): /etc/db-ha/node.env (ROLE, MEMBERS="name=ip,...") and /etc/db-ha/secrets (0600).
 # The same script builds a brand-new group and replaces one lost machine of a running group; it decides by looking at what answers:

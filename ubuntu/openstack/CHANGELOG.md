@@ -45,6 +45,10 @@ Update this file in the same commit as any change, and list anything done **by h
 - All 19 VMs started by themselves after the reset, both front doors 200 about 4 minutes after `c3` answered ssh, no load balancer failovers, no stuck VM (`docs/c3-reboot.md` Test 6; an earlier wording that called it a clean plain reboot was wrong, the shutdown had hung and the host was reset by hand).
 - **Why `systemctl reboot` hangs:** `ovn-controller` and the other network services stopped before `libvirt-guests` shut the guests down, so the prod workers (`w1` to `w3`) lost their network and sat for the full 300 s shutdown timeout. Added the drop-in `/etc/systemd/system/libvirt-guests.service.d/20-order-after-ovn.conf` on `c3` (by hand, untested). **Standing rule: restart `c3` with a force reboot** until a plain reboot has been seen to complete.
 
+### Five etcd voters (`dbw2`, `dbw3` added) and `dbw` renamed `dbw1`
+- Two more witnesses (10.0.1.121/.122, m1.tiny) built by Terraform/cloud-init and joined to etcd by themselves; Patroni lists all five addresses; monitor checks every witness; `scripts/db-ha-etcd-grow.sh` for the existing machines. **Drill: witness `dbw1` and the primary `db2` powered off together: `db1` Leader after 35 s, zero acknowledged writes lost** (the scenario that used to stop failover). Emergency procedure for a real loss of the majority is in `docs/db-ha-patroni.md`.
+- `dbw` renamed **`dbw1`** (same address 10.0.1.120): the VM is replaced by Terraform (two applies, the first may stop on "IP already allocated"). The new VM rejoins etcd by itself.
+
 ### Load balancers: `argo-lb` is ACTIVE_STANDBY, dead amphora repaired in 5 minutes (OpenStack, by hand, scripted)
 - `argo-lb` rebuilt as ACTIVE_STANDBY with `scripts/octavia-argo-lb-ha.sh` (new VIP `10.0.1.76`, the floating IP `192.168.2.113` moved, old load balancer deleted): master amphora powered off, 100 of 100 requests HTTP 200. Four amphorae now.
 - `heartbeat_timeout` 900 -> **300** (and `octavia-health-manager` restarted; backup `/root/octavia.conf.bak-20261020-heartbeat`). Plain reboot of `c3` afterwards: 0 failovers, same four amphorae, front doors 200.

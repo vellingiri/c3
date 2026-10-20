@@ -1,6 +1,6 @@
 # Finance database: primary `db1` and streaming replica `db2`
 
-> **Since 2026-10-20 the pair is run by Patroni** (automatic failover, etcd witness `dbw`). Day-to-day operation, failover, switchover and recovery are in
+> **Since 2026-10-20 the pair is run by Patroni** (automatic failover, etcd witness `dbw1`). Day-to-day operation, failover, switchover and recovery are in
 > **[db-ha-patroni.md](db-ha-patroni.md)**. This page is the build record and background. **Do not use the manual `pg_promote` / `db-replica-setup.sh` steps below on a
 > Patroni node** (Patroni would fight them); use `patronictl switchover` / `failover` / `reinit` instead. Replication monitoring (below) still applies.
 
