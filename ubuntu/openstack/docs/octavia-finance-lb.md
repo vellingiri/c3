@@ -83,7 +83,7 @@ Not carried over from haproxy: its `qa.rdulinux.com` -> QA-cluster route (the `q
 ## Old haproxy VM (retired 2026-10-20)
 Removed from `environments/prod/nodes.yaml`; `terraform apply` destroys the VM, its port and floating IP `.119`. The
 `loadbalancer` role, `cloud-init/haproxy.*` and the `haproxy` ssh alias were deleted. Its last config is in git history
-(`cloud-init/haproxy.cfg`). The DNS name `haproxy.rdulinux.com` was renamed to `lb.rdulinux.com` (A and PTR for `.5`); no `haproxy` name remains.
+(`cloud-init/haproxy.cfg`). The DNS names `haproxy.rdulinux.com` and `lb.rdulinux.com` were retired; `finance.rdulinux.com` is the name of 192.168.2.5 (A and PTR).
 Before this, Terraform had to adopt `.119` as the VM's floating IP (`terraform state rm` + `import` of the association)
 so that it would not re-attach `.5`; that is no longer relevant.
 

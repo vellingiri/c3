@@ -113,13 +113,8 @@ moved {
   to   = openstack_dns_recordset_v2.forward["argo"]
 }
 
-# haproxy.rdulinux.com becomes lb.rdulinux.com (192.168.2.5 is now the Octavia load balancer). No haproxy name remains.
+# lb.rdulinux.com (formerly haproxy) is retired: the A record is destroyed, the PTR of 192.168.2.5 moves to finance.
 moved {
-  from = openstack_dns_recordset_v2.forward["haproxy"]
-  to   = openstack_dns_recordset_v2.forward["lb"]
-}
-
-moved {
-  from = openstack_dns_recordset_v2.ptr["haproxy"]
-  to   = openstack_dns_recordset_v2.ptr["lb"]
+  from = openstack_dns_recordset_v2.ptr["lb"]
+  to   = openstack_dns_recordset_v2.ptr["finance"]
 }
