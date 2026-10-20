@@ -82,6 +82,7 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 - `sed -i` needs an empty suffix on macOS: `sed -i '' ...`.
 - An unquoted `*` that matches nothing is an error in zsh: quote it.
 - `status` is a read-only variable in zsh.
+- macOS has **no `timeout` command**: `timeout 15 kubectl ...` fails with "command not found" and, with `2>/dev/null`, looks like an empty result. Use `kubectl --request-timeout=30s`, `curl -m`, `ssh -o ConnectTimeout=`.
 - macOS `nc -z host port` needs about 75 s to give up on a dead host: use `-w 2` and do not rely on it for timing.
 - macOS caches DNS beyond a record's TTL: flush it (command above) before concluding a DNS change did not work.
 - `kubectl exec ... -- python -` needs `-i` or the script is not sent.
