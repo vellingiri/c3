@@ -19,6 +19,10 @@ Update this file in the same commit as any change, and list anything done **by h
 | the *original* prod worker `w1` (10.0.1.118) and the test VMs `web1`, `web2` | deleted; prod `w1` was re-created as a new VM |
 | ssh alias `qa` | removed; `ssh w1.prod` and `ssh w1.qa` both work |
 
+### Verified: client addresses behind the load balancer
+- nginx logs the real visitor address (`192.168.1.13`, `192.168.2.2`) as `client_ip` behind `finance-lb`, so per-address limits count per person (still per nginx pod). Noted in the finance repo's `docs/CICD_SETUP.md`.
+- The finance backend's `/health` now ends with a newline (finance repo, deployed in `sha-94290d1`).
+
 ### Host `c3`: a plain reboot now brings everything back, including both front doors (see `docs/amphora-reboot-fix.md`)
 - **Result:** two plain reboots of `c3` with all 17 VMs running and no manual step: VMs back by themselves in about 2 minutes, both front doors 200 about 3 minutes after `c3` answered ssh, the same three amphorae (no rebuilds), load balancers `ACTIVE`/`ONLINE`.
 - **Root causes found and fixed:** (1) the amphora image (Octavia 16.1.1) lost its VIP network after any clean shutdown: its boot script paired lines of `ip link` (breaks on `altname` lines) and raced udev's NIC rename; **patched image `Amphora-netns-fix-v2-20261020`** (the only one tagged `Amphora`; all three amphorae rebuilt from it); (2) OVN's router (`always_learn_from_arp_request=false`, no aging) kept a stale MAC for a rebuilt amphora: new **`ovn-vip-binding.timer`** watcher on `c3` (`scripts/ovn-vip-binding-reconciler.py`, every 30 s, no credentials needed); (3) Octavia's health manager rebuilt amphorae that were just waking up: **`heartbeat_timeout = 900`** (and `failover_threshold = 2`).
