@@ -113,8 +113,19 @@ Rehearsed on a scratch cluster first; lessons are in the header of `scripts/db-h
 Scripts: `scripts/db-ha-etcd.sh` (install/status), `scripts/db-ha-patroni.sh` (prepare, adopt-primary, adopt-replica, status, notify, rollback), `scripts/db-replication-monitor.sh`.
 Terraform: role `witness` (`modules/node`, `cloud-init/witness.yaml.tftpl`), VM `db-witness` in `environments/prod/nodes.yaml`.
 
-## Not in Terraform (by hand / scripts)
+## Built by Terraform (no manual work for a new or replaced node)
 
-`/etc/patroni/config.yml`, `/etc/default/etcd`, `/etc/nftables-etcd.conf`, the etcd data in `/var/lib/etcd/db-ha`, `/usr/local/bin/patroni-notify`,
-`/etc/default/patroni-notify`, `PATRONICTL_CONFIG_FILE` in `/etc/environment`, two `pg_hba` lines (`postgres` from each DB host), and the monitor copy on the runner.
-**If a DB VM is rebuilt from Terraform these are gone**; redo them with the scripts above.
+Everything on the VMs is now produced by cloud-init from Terraform: `cloud-init/db-ha.yaml.tftpl` + `cloud-init/files/db-ha-node.sh` (etcd, nftables guard,
+`/etc/patroni/config.yml` with pg_hba, patroni-notify, `PATRONICTL_CONFIG_FILE` and the root `patronictl` config link, Patroni service).
+The script decides by what answers: a running etcd cluster is **joined** (a stale entry for the same name/address is removed first), otherwise a new one is formed;
+Patroni with an empty data directory **copies the leader** (or, if no cluster exists, one node initialises an empty database and the other copies it).
+`ip:` in `environments/prod/nodes.yaml` pins the three addresses. The passwords are Terraform variables from `environments/prod/secrets.auto.tfvars`
+(git-ignored; create it once with `scripts/db-ha-secrets.sh`, which reuses the live cluster's values).
+
+Replace a lost or broken database VM: `terraform apply -replace='module.node["db2"].openstack_compute_instance_v2.this'` (in `environments/prod`). Nothing else.
+Watch with `patronictl list`; the new member shows `creating replica`, then `streaming`. After a from-scratch rebuild of **both** database VMs the cluster is empty:
+restore the data (`finance-db-restore.md`, roles `financeapp` and `monitor` included).
+
+Existing VMs are untouched (user data is ignored after first boot); `scripts/db-ha-etcd.sh` and `db-ha-patroni.sh` are the record of how they were adopted.
+Status: written 2026-10-20, **not yet proven on a real replacement**; the first test is replacing `db-witness`, then `db2`.
+Still outside Terraform: the monitor copy on the runner (`scripts/install-db-monitor.sh`).
