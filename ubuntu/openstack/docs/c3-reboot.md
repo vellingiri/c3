@@ -5,15 +5,58 @@ This page is the procedure that worked, what went wrong and how it was repaired,
 
 ## Facts that decide how to reboot (all checked on 2026-10-20)
 - OpenStack on `c3` is installed from **Debian 13 packages as systemd services** (Nova 31, Neutron 26, Octavia, Designate); there is **no Kolla and no Docker** (podman exists but is unused). All control-plane services are enabled at boot (MariaDB, RabbitMQ, OVS/OVN, Nova, Neutron, Octavia, Designate, Apache), so the cloud comes back by itself.
-- **Nova does not restart VMs after a host boot** (`resume_guests_state_on_host_boot` is not set, so it is false). After the reboot every VM is `SHUTOFF` until you start it.
+- **Until 2026-10-20 Nova did not restart VMs after a host boot** (`resume_guests_state_on_host_boot` was unset, so false): after the first reboot test every VM stayed `SHUTOFF` until started by hand. **That is now configured, see "Automatic VM start" below** (the manual start steps are kept as the fallback).
 - No Cinder: there are no volumes. VM disks are local files, so nothing needs re-attaching.
 - `libvirt-guests` is enabled; this procedure does not depend on it because the guests are shut down through Nova first.
 - The host bridge `br0` and the route `10.0.1.0/24 via 192.168.2.174` come from `/etc/network/interfaces`. **Boot-tested: the route was there by itself after the reboot** (`c3-host-route.md`).
-- `nmbd` (Samba NetBIOS) fails to start on **every** boot, including before this test. It is unrelated; ignore it (`systemctl --failed` will list it).
+- `nmbd` (Samba NetBIOS) used to fail on every boot; fixed the same day (see "Other fixes"), so `systemctl --failed` should now be empty.
 - The CI runner is a VM: do not reboot while a GitHub Actions job is running on it.
 
-## Procedure
-Allow about an hour including checks (the test took longer, because of the Octavia repairs below). The finance app is down from the first shutdown until the pods and a load balancer are back, and Argo CD may be down longer (see "What went wrong").
+## Automatic VM start (configured 2026-10-20)
+Goal: after `c3` boots, the VMs that were running come back by themselves. Four changes on `c3`; each file was backed up as `<file>.bak-20261020`.
+| # | File | Change | Why |
+|---|---|---|---|
+| 1 | `/etc/nova/nova.conf`, `[DEFAULT]` | `resume_guests_state_on_host_boot = true` | when `nova-compute` starts it restarts every instance that Nova thinks should be running (state `ACTIVE`) but whose guest is off. Instances an operator stopped through Nova (`SHUTOFF`) are left alone |
+| 2 | `/etc/default/libvirt-guests` | `ON_BOOT=ignore`, `ON_SHUTDOWN=shutdown`, `SHUTDOWN_TIMEOUT=300`, `PARALLEL_SHUTDOWN=20` | at host shutdown the guests get a clean ACPI shutdown, all in parallel (the default saves their memory to disk one by one); at boot libvirt starts nothing and leaves it to Nova, so the two never fight |
+| 3 | `/etc/systemd/system/nova-compute.service.d/10-order-after-libvirt-guests.conf` | `After=libvirt-guests.service` | systemd stops units in the reverse of start order, so `nova-compute` now stops **before** `libvirt-guests` shuts the guests down. Otherwise Nova could see a shut-down guest, record it as `SHUTOFF`, and never restart it |
+| 4 | `/etc/octavia/octavia.conf`, `[health_manager]` | `failover_threshold = 2` | after a reboot every amphora looks dead for a moment, and the health manager used to rebuild them (what broke the load balancers in the first test). With this setting, if 2 or more amphorae are stale at the same time they are marked `FAILOVER_STOPPED` and **no failover happens**; they go back to normal when heartbeats resume. A single dead amphora is still replaced automatically |
+
+Apply (what was done), on `c3` as root:
+```bash
+cp -p /etc/nova/nova.conf /etc/nova/nova.conf.bak-$(date +%Y%m%d)       # same for the other three files
+sed -i '0,/^\[DEFAULT\]/s//[DEFAULT]\nresume_guests_state_on_host_boot = true/' /etc/nova/nova.conf
+printf 'ON_BOOT=ignore\nON_SHUTDOWN=shutdown\nSHUTDOWN_TIMEOUT=300\nPARALLEL_SHUTDOWN=20\n' >> /etc/default/libvirt-guests
+mkdir -p /etc/systemd/system/nova-compute.service.d
+printf '[Unit]\nAfter=libvirt-guests.service\n' > /etc/systemd/system/nova-compute.service.d/10-order-after-libvirt-guests.conf
+systemctl daemon-reload
+sed -i '0,/^\[health_manager\]/s//[health_manager]\nfailover_threshold = 2/' /etc/octavia/octavia.conf
+systemctl restart nova-compute octavia-worker octavia-health-manager    # restart BOTH octavia services after any octavia.conf change
+```
+Check it is in effect:
+```bash
+grep -h resume_guests /etc/nova/nova.conf; grep -h failover_threshold /etc/octavia/octavia.conf
+systemctl show nova-compute -p After | tr ' ' '\n' | grep libvirt-guests
+```
+Undo: restore the `.bak-20261020` files, delete the drop-in, `systemctl daemon-reload`, restart the three services.
+
+**Proven on the spare VM `learn`, without rebooting the host:** (a) `nova-compute` stopped, the guest shut down behind Nova's back, `nova-compute` started: the guest was running again after **24 s** and `ssh learn.qa` worked;
+(b) a VM stopped on purpose through Nova stayed `SHUTOFF` after a `nova-compute` restart. **Not yet proven end to end:** a real host reboot with everything running (the clean shutdown of all guests, the stop order, and the Octavia threshold during the stale-heartbeat window).
+Until that has been done, treat the next reboot as a test and keep the procedure below as the fallback.
+
+Limits to know:
+- All VMs start at once, with no database-first ordering. The apps and Postgres replication retry and caught up in the first test, but check after a reboot.
+- The threshold also means that if **two** amphorae die at the same time, Octavia will not repair them by itself: look at `openstack loadbalancer amphora list` and run `openstack loadbalancer failover <lb>` by hand.
+
+## Other fixes made on `c3` the same day
+- **`nmbd` failed on every boot.** `/etc/samba/smb.conf` had `interfaces = 127.0.0.0/8 enp3s0`, but `enp3s0` has no IP address (it is a port inside the bridge `br0`, which carries `192.168.2.2`), so nmbd logged "No local IPv4 non-loopback interfaces available, waiting for interface", never reported ready, and systemd timed it out.
+  Fixed with `interfaces = 127.0.0.0/8 br0` (backup `smb.conf.bak-20261020`); `systemctl --failed` is now empty. Proof at boot comes with the next reboot.
+- **`nslookup w1.prod` said NXDOMAIN on `c3`** while `ssh w1.prod` worked. The DNS server was right: BIND's tools (`nslookup`, `host`) treat a name with one dot as complete and skip the search list, while `ssh` (glibc) falls back to it.
+  Fixed with `options ndots:2` in `/etc/resolv.conf` (after the search line `rdulinux.com prod.rdulinux.com qa.rdulinux.com`), so `w1.prod`, `c1.qa`, `w2` and `finance` resolve in every tool.
+  What it means: a name with fewer than 2 dots is tried with the search suffixes first; names with 2 or more dots (`repo.rdulinux.com`) are tried as typed. Side effect: a one-dot external name such as `github.com` first tries the three suffixes (a few milliseconds, then resolves normally).
+  Backup `resolv.conf.bak-20261020`. `/etc/resolv.conf` is a plain file here (no resolvconf, no systemd-resolved), so the edit persists.
+
+## Procedure (manual: the fallback, and the checks that still apply)
+With automatic start configured (above) the manual shutdown and start steps can be skipped, but not the checks before and after. Allow about an hour including checks (the test took longer, because of the Octavia repairs below). The finance app is down from the first shutdown until the pods and a load balancer are back, and Argo CD may be down longer (see "What went wrong").
 
 ### Before
 1. **No CI running:** `gh run list --repo vellingiri/finance --limit 3` (wait until `completed`; the deploy step runs on the runner).

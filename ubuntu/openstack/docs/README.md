@@ -15,7 +15,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | restore data from a backup | [finance-db-restore.md](finance-db-restore.md) |
 | rebuild a whole Kubernetes cluster | [prod-k8s-rebuild.md](prod-k8s-rebuild.md), [etcd-restore-rehearsal.md](etcd-restore-rehearsal.md) |
 | understand why Terraform looks the way it does, or adopt a VM | [terraform-v2-migration.md](terraform-v2-migration.md), [../README.md](../README.md) |
-| reboot `c3` (or recover after it rebooted): VMs do not restart by themselves | [c3-reboot.md](c3-reboot.md) |
+| reboot `c3` (or recover after it rebooted); how VMs restart by themselves, the nmbd and name-lookup fixes | [c3-reboot.md](c3-reboot.md) |
 | understand or undo the route that lets `c3` reach private VM addresses | [c3-host-route.md](c3-host-route.md) |
 | decide about automatic database failover | [db-auto-failover-plan.md](db-auto-failover-plan.md) (proposal, nothing built) |
 

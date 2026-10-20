@@ -25,7 +25,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 ### Shared services (zone `rdulinux.com`)
 | Name | Floating IP | Private IP | What |
 |---|---|---|---|
-| `c3` | 192.168.2.2 | n/a | the cloud host: OpenStack (Debian packages) and the DNS server (Designate). **Rebooting it takes everything down and Nova does not restart the VMs: `c3-reboot.md`** |
+| `c3` | 192.168.2.2 | n/a | the cloud host: OpenStack (Debian packages) and the DNS server (Designate). **Rebooting it takes everything down; the VMs are set to restart by themselves (configured 2026-10-20, not yet proven through a real reboot): `c3-reboot.md`** |
 | `repo` | 192.168.2.3 | n/a | NFS server: VM images, finance logs, uploads and backups (`/exports/finance-qa/...`); VMs mount a share at `/nfsshare` (join files, etcd snapshots) |
 | `backup` | 192.168.2.4 | n/a | backup host (off-host copies, e.g. `/backup/finance-qa/pre-rebuild-20261019/`) |
 | `finance` | 192.168.2.5 | VIP 10.0.1.89 | the finance app, served by Octavia `finance-lb` |
@@ -76,6 +76,7 @@ nginx pods (3, one per node)  ->  /api -> backend (3)   /docs -> docs (3)   / ->
 ### What Terraform does **not** manage (change these by hand, and note it in `CHANGELOG.md`)
 - **Octavia:** the flavor `ha`, `finance-lb`, `argo-lb`, their listeners, pools, members (**static**: edit them when a worker is added or retired) and floating IPs (`octavia-finance-lb.md`).
 - **Host networking on `c3`:** a static route `10.0.1.0/24 via 192.168.2.174` (the router's external address) in `/etc/network/interfaces` so the host can reach private VM addresses (`c3-host-route.md`).
+- **VM autostart and other host settings on `c3`:** `resume_guests_state_on_host_boot` in `nova.conf`, `/etc/default/libvirt-guests`, a systemd ordering drop-in for `nova-compute`, `failover_threshold` in `octavia.conf`, `interfaces = ... br0` in `smb.conf`, and `options ndots:2` in `/etc/resolv.conf` (`c3-reboot.md`).
 - **Cloud tuning on `c3`:** Placement allocation ratios (disk 1.5, memory 1.1), project core quota 64, and `/etc/octavia/octavia.conf` (restart BOTH `octavia-worker` and `octavia-health-manager` after any change).
 - **Kubernetes secrets** (`app-secret`, `db-secret`, `ghcr-secret`, Argo CD's repo credential and `argocd-secret`): not in git, not in Terraform. They are copied between clusters with `scripts/k8s-copy-between.sh` without touching disk.
 - **PostgreSQL itself:** roles (`financeapp`, `replicator`, `monitor`), `pg_hba.conf`, `conf.d/20-replication.conf`, replication slot `slot_db2`; built by `scripts/db-replica-setup.sh`, not by cloud-init.

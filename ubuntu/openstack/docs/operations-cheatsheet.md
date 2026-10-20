@@ -61,6 +61,10 @@ kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w
 | etcd snapshots | `ssh c1.prod 'ls -lh /var/backups/etcd \| tail -3'` | a recent file |
 | CI | `gh run list --repo vellingiri/finance --limit 3` | `completed/success` |
 
+## Name lookups on `c3`
+`c3` resolves short names through the search list `rdulinux.com prod.rdulinux.com qa.rdulinux.com` with `options ndots:2`: `w1.prod`, `c1.qa`, `w2` (prod), `finance` and `db1` all work in `nslookup`, `host`, `dig +search` and `ssh`
+(details in `c3-reboot.md`, "Other fixes"). Your Mac uses the aliases in `~/.ssh/config` for ssh.
+
 ## Credentials: where they are (never in git, never paste them in chat)
 | Secret | Lives in |
 |---|---|
