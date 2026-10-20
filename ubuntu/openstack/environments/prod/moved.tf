@@ -19,3 +19,9 @@ moved {
   from = module.node["prod-w3"]
   to   = module.node["w3"]
 }
+
+# db is renamed db1 (same VM, port and floating IP; the Nova name changes in place).
+moved {
+  from = module.node["db"]
+  to   = module.node["db1"]
+}

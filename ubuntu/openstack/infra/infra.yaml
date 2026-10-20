@@ -57,6 +57,8 @@ dns:
     c3:      { ip: 192.168.2.2, ptr: true }
     repo:    { ip: 192.168.2.3, ptr: true }
     backup:  { ip: 192.168.2.4, ptr: true }
+    # db is the service name of the CURRENT primary Postgres (db1 now, db2 after a failover); change ip to fail over.
+    db:      { ip: 192.168.2.124, ttl: 60 }
     finance: { ip: 192.168.2.5, ptr: true }   # the finance app, served by finance-lb
     argo:    { ip: 192.168.2.113, ptr: true }   # argo-lb, its own Octavia load balancer (finance-lb keeps 192.168.2.5)
     "@":     { ip: 13.140.58.46 }

@@ -48,7 +48,7 @@ resource "openstack_dns_recordset_v2" "forward" {
   zone_id = local.zone_ids[each.value.zone]
   name    = each.value.name == "@" ? each.value.zone : "${each.value.name}.${each.value.zone}"
   type    = "A"
-  ttl     = 3000
+  ttl     = try(each.value.ttl, 3000)
   records = [each.value.ip]
 }
 

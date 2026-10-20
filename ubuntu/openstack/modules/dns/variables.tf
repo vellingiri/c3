@@ -17,6 +17,6 @@ variable "email" {
 }
 
 variable "records" {
-  description = "key => {ip, ptr?, zone?, name?}. zone defaults to zone_name, name to the key; name \"@\" is the zone apex. ptr=true also creates the PTR."
+  description = "key => {ip, ptr?, zone?, name?, ttl?}. zone defaults to zone_name, name to the key; name \"@\" is the zone apex. ptr=true also creates the PTR."
   type        = map(any)
 }
