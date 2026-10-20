@@ -115,16 +115,23 @@ Why: a plain `systemctl reboot` of `c3` sometimes sticks, so the flow was tried 
 **Patroni during the shutdown/start:** the database VMs came back one at a time (`db2` before `db1`/`dbw`), so etcd had no majority for a while and the leader moved: timelines 15 (`db2`), 16 (`db1`), 17; the end state is `db1` Leader, `db2` Replica streaming, lag 0, one primary at every check (no split brain). Start `db1` and `dbw` first, then `db2`, as the Start list above says.
 Not covered by this test: automatic VM start (`resume_guests_state_on_host_boot`; the VMs were stopped through Nova on purpose, which Nova remembers as intentional), and the second amphora-related failover flaw.
 
-## Test 6 (2026-10-20, evening): plain `systemctl reboot` with all 19 VMs running, automatic VM start, nothing done by hand
-This is the real "host rebooted" case: `resume_guests_state_on_host_boot = true` (Nova) with `ON_SHUTDOWN=shutdown` / `SHUTDOWN_TIMEOUT=300` (libvirt-guests), health manager left **enabled** (`heartbeat_timeout = 900`).
+## Test 6 (2026-10-20, evening): reboot with every VM running, automatic VM start, nothing started by hand
+**Correction (an earlier version of this section said the plain reboot "did not get stuck"; that was wrong).** `systemctl reboot` was issued at 18:46:40 and the shutdown **did hang** (see "Why a plain reboot hangs" below);
+the host was then reset by hand (the previous boot's log ends at 18:51:08 in the middle of the guest shutdown, and there was a second, short boot of 57 s, 18:51:54 to 18:52:51, before the final one at 18:53:30; neither reset was done from this session). So what this test really proves is **automatic start after a hard reset with all 19 VMs running**, which is the situation after a force reboot.
+`resume_guests_state_on_host_boot = true` (Nova), health manager left **enabled** (`heartbeat_timeout = 900`).
 | | |
 |---|---|
 | Before | CI idle; DB dump, etcd snapshot, Patroni 1 Leader + 1 Replica |
-| `systemctl reboot` at 18:46:40 | `c3` stopped answering 11 s later (it did **not** get stuck this time: the guests shut down gracefully) and answered ssh again at **18:52:05** (5 min 25 s from the command) |
-| VMs | all 19 started by themselves: guests running 7 / 10 / 13 / 16 / 19 within about 60 s of each other; no VM stuck in `powering-on`; no manual step |
+| After the reset | all 19 VMs started by themselves, running 7 / 10 / 13 / 16 / 19 within about a minute; none stuck in `powering-on`; no manual step |
 | Front doors | `argo` 200 and `finance` 200 about **4 minutes after `c3` answered ssh** (503 for the last 30 s while the pods settled) |
-| After | prod, qa and cka 4 of 4 `Ready`; 12 of 12 prod pods; Argo `Synced Healthy`; both pools 3 of 3 `ONLINE`; same 3 amphorae `ALLOCATED`, load balancers `ACTIVE`/`ONLINE` (no failovers); Patroni `db1` Leader, `db2` Replica streaming, lag 0 (timeline 18: the leader changed once while the pair came back); etcd 3 of 3; monitor green; CI runner online; app reads `10.0.1.191 | f` |
-Conclusion: unattended host reboot works end to end; total outage about 9 minutes (5 min host + 4 min services). The "stuck" reboot seen earlier did not repeat; if it does, the fallback is to wait for the guest shutdown (up to `SHUTDOWN_TIMEOUT` 300 s per round) and only then `systemctl reboot --force --force` (test 5 shows that the flow after a force reboot works if the VMs were stopped first).
+| After | prod, qa and cka 4 of 4 `Ready`; 12 of 12 prod pods; Argo `Synced Healthy`; both pools 3 of 3 `ONLINE`; same 3 amphorae `ALLOCATED`, load balancers `ACTIVE`/`ONLINE` (no failovers); Patroni `db1` Leader, `db2` Replica streaming, lag 0 (timeline 18); etcd 3 of 3; monitor green; CI runner online; app reads `10.0.1.191 | f` |
+**The standard way to restart `c3` is therefore: a force reboot (after stopping the VMs, as in test 5, or with them running as here).**
+
+## Why a plain reboot hangs (found 2026-10-20 from the journal of the stuck shutdown)
+- During the hang `libvirt-guests` asked all 19 guests to shut down at 18:46:48. 16 finished within about 90 s. **Three never finished: the prod workers `w1`, `w2`, `w3`** (`Waiting for 3 guests to shut down` counted down the whole `SHUTDOWN_TIMEOUT` of 300 s, 18:46:48 to 18:51:48).
+- Cause: systemd stopped `ovn-controller`, `ovn-host`, `ovn-central`, the OVN databases and the Neutron services at **18:46:46 to 18:46:47, before `libvirt-guests` began** (nothing ordered `libvirt-guests` ahead of them). `ovn-controller` removes the guests' network flows when it stops, so every guest lost its network while shutting down. VMs that can power off without a network (most of them) did; the prod workers cannot (kubelet stopping pods, NFS-backed volumes), so they sat at their own stop timeouts until `libvirt-guests` gave up. Nova's `openstack server stop` does not have this problem because the network is still up then (the same workers stop in about 60 s).
+- Fix applied (not yet tested): `/etc/systemd/system/libvirt-guests.service.d/20-order-after-ovn.conf` makes `libvirt-guests` start after OVN, OVS and the DHCP agent, so at shutdown it stops **before** them. Check with `systemctl show libvirt-guests -p After`. Same idea as the earlier `nova-compute` drop-in. Until a plain reboot has been seen to complete (it needs a deliberate test), keep using the force reboot.
+- Guest journals are not persistent (lost at each boot), so the workers' own side could not be read afterwards. Making the guests' journals persistent (`Storage=persistent`) would show what they were stuck on next time; not done.
 
 ## History: what went wrong in test 1, and the manual repair (superseded, kept as the fallback)
 This is how the first test went and how it was repaired by hand. The root causes were found later and are fixed: `amphora-reboot-fix.md`.

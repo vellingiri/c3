@@ -11,6 +11,8 @@ What is deliberately not done yet, who decides, and what finishes it. Update thi
 | Runner kernel oops (seen once, test 5; not seen in test 6) | the `runner` guest crashed once in the `.NET` GitHub runner process, 72 s after boot (reboot test 5); a similar `segfault at 0 ip 0` of an `openstack` client was logged on the host. Did not recur after a stop/start. Cause unknown | if it recurs: note the time, capture `openstack console log show runner` and `dmesg` on `c3`, check the host kernel (6.12.95) and the nested-KVM setting |
 | Two-amphora failover of `finance-lb` | `openstack loadbalancer failover finance-lb` fails about half the time with a Placement "no allocation candidates" error; a retry works. Cause not found | retry; open a deeper investigation only if it blocks a rebuild |
 
+| **Test the shutdown-order fix** | `systemctl reboot` hangs because OVN stops before the guests (`c3-reboot.md`, "Why a plain reboot hangs"); a systemd drop-in was added but never exercised. Until then always force-reboot `c3` | at a convenient moment run a plain `systemctl reboot` with VMs running; if it completes in about 2 minutes plus guest shutdown, record it and relax the rule. Optionally make guest journals persistent to see what the workers do while stopping |
+
 ## Accepted limits (no action planned)
 - Database replication is asynchronous: in a hard failure the last seconds (up to the 1 MB lag guard; about 20 s in a partition) can be lost. `synchronous_mode` would remove that at the price of writes stalling when the replica is unreachable (`db-ha-patroni.md`).
 - Losing two of the three etcd machines (`dbw` and one database) stops automatic database failover until one is back.
