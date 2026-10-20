@@ -137,7 +137,7 @@ Two separate things, one fixed and one still open:
    - **Fix (applied 2026-10-20): kubelet graceful node shutdown.** `shutdownGracePeriod: 30s` and `shutdownGracePeriodCriticalPods: 10s` in `/var/lib/kubelet/config.yaml` (restart kubelet). kubelet then takes a systemd delay lock (`systemd-inhibit --list` shows `kubelet ... Kubelet needs time to handle node shutdown`), stops the pods first (SIGTERM, then SIGKILL after the pod's grace) while the network and NFS are still up, and only then lets the power-off continue. kubelet manages the logind delay itself (`/etc/systemd/logind.conf.d/99-kubelet.conf`); the grace period must not be larger than what it can set, 30 s works (60 s did not: `unable to update logind InhibitDelayMaxSec`).
    - **Result: the same `virsh shutdown` of prod `w1` now takes 33 s (was 271 s).** Applied by hand to all nodes of prod, qa and cka, and added to `cloud-init/k8s-worker.yaml.tftpl` and `k8s-controller.yaml.tftpl` for new nodes (last `runcmd` step). The prod workers' journals are persistent too (`cloud-init/base.yaml.tftpl` for new VMs).
    - Still worth doing in the finance app (not done): the `node` container ignores SIGTERM (PID 1 without a signal handler); an init process or a handler would make pod stops instant.
-- **Rule of thumb:** a plain `systemctl reboot` of `c3` should now complete in well under 3 minutes plus the boot. Until a full plain reboot has been run with this fix (not yet done), the standard stays the **force reboot**, optionally after stopping the VMs for a clean fast stop (test 5).
+- **Rule of thumb (after test 8):** a plain `systemctl reboot` of `c3` now completes by itself in about 75 s (host back in under 2 minutes). The force reboot (after stopping the VMs, test 5) stays available as the fallback if a shutdown ever really hangs; arm the `reboot-fallback` unit from test 7 when trying a plain reboot unattended.
 
 ## Test 7 (2026-10-20, 19:02): plain `systemctl reboot` with all 19 VMs running, with the ordering fix, safety net armed
 A transient unit `reboot-fallback` (`systemd-run --property=DefaultDependencies=no sh -c 'sleep 420; sync; echo b > /proc/sysrq-trigger'`) was armed to force-reset the host after 7 minutes if the shutdown had not finished by then (it was not needed and is gone after the reboot).
@@ -147,6 +147,14 @@ A transient unit `reboot-fallback` (`systemd-run --property=DefaultDependencies=
 | Shutdown | `libvirt-guests` began 19:02:46, 16 guests done within about 90 s, the three prod workers done at 19:07:15 to 19:07:25; `ovn-controller` stopped at 19:07:18 (after the guests); host went down at 19:07:25 |
 | Back | `c3` answered ssh **327 s after the command** (5 min 27 s); all 19 VMs running by themselves; both front doors 200 within about a minute of that |
 | After | prod, qa and cka 4 of 4 `Ready`; 12 of 12 prod pods; Argo `Synced Healthy`; same 3 amphorae `ALLOCATED`, load balancers `ACTIVE`/`ONLINE`; Patroni `db1` Leader, `db2` Replica streaming, lag 0 (timeline 19); etcd 3 of 3; monitor green; CI runner online; app reads `10.0.1.191 | f`; no failed units |
+
+## Test 8 (2026-10-20, 19:32): plain `systemctl reboot` with all 19 VMs running, with both fixes (OVN order + kubelet graceful shutdown), safety net armed: passed
+| | |
+|---|---|
+| Command | `systemctl reboot` at 19:32:40 (`reboot-fallback` armed for a force reset at 7 minutes; not needed) |
+| Shutdown | `libvirt-guests` began 19:32:48; **all 19 guests shut down by 19:33:20** (the slowest, a prod worker, 32 s; before the fix 4.5 min); `ovn-controller` stopped at 19:33:20 (after the guests); host down at 19:33:55 (**75 s**) |
+| Back | `c3` answered ssh at 19:34:29 (**109 s after the command**, was 327 s); all 19 VMs started by themselves; `argo` and `finance` 200 about 4.5 minutes after the command (503 while the pods settle) |
+| After | prod, qa and cka 4 of 4 `Ready`; 12 of 12 prod pods, none `Terminating`; Argo `Synced Healthy`; same 3 amphorae `ALLOCATED`, load balancers `ACTIVE`/`ONLINE`; Patroni `db1` Leader, `db2` Replica streaming, lag 0 (timeline 20); etcd 3 of 3; monitor green; CI runner online; app reads `10.0.1.191 | f`; no failed units |
 
 ## History: what went wrong in test 1, and the manual repair (superseded, kept as the fallback)
 This is how the first test went and how it was repaired by hand. The root causes were found later and are fixed: `amphora-reboot-fix.md`.
