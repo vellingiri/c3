@@ -1,4 +1,4 @@
-# Octavia load balancer for the finance app (prod)
+# Octavia load balancers for prod: `finance-lb` (finance app) and `argo-lb` (Argo CD)
 
 Goal: put the prod finance app behind an Octavia load balancer that health-checks the workers and survives the loss
 of one of its own nodes, instead of the single `haproxy` VM that used to own `192.168.2.5`. Built 2026-10-20 with the OpenStack CLI
@@ -8,11 +8,11 @@ on `c3` (not Terraform-managed). The old haproxy VM was destroyed afterwards (se
 | Object | Value |
 |---|---|
 | Load balancer | `finance-lb`, flavor `ha` (**ACTIVE_STANDBY**: two amphorae, VRRP failover) |
-| VIP / floating IP | `10.0.1.89` on `private_subnet` / **`192.168.2.5`** (after the cutover below) |
+| VIP / floating IP | `10.0.1.89` on `private_subnet` / **`192.168.2.5`** (finance app only, after the cutover below) |
 | Listener | `finance-http` HTTP :80, inserts `X-Forwarded-For` |
 | Pool `finance-pool` | workers `w2 10.0.1.197`, `w3 10.0.1.45`, `w4 10.0.1.206`, `w5 10.0.1.33` : **30080** (nginx NodePort), HTTP monitor `GET /health` = 200 |
-| Pool `argo-pool` | same workers : **30443** (Argo CD), HTTP monitor `GET /healthz` = 200 |
-| L7 policies | `argo` (Host = `argo.rdulinux.com`) and `argo-host` (regex `^argo(\.rdulinux\.com)?(:[0-9]+)?$`: short name and host-with-port, as the old haproxy accepted) -> `argo-pool`; everything else -> `finance-pool` |
+| L7 policies | none; every request goes to `finance-pool` |
+| **`argo-lb`** | separate load balancer (SINGLE topology: one amphora), VIP `10.0.1.56` / floating IP **`192.168.2.113`** (`argo.rdulinux.com`). Listener `argo-http` HTTP :80 -> pool `argo-backend`: workers w2-w5 : **30443** (Argo CD), HTTP monitor `GET /healthz` = 200 |
 
 ## Verified
 - Same status + content hash as the live haproxy on 8 public paths; Argo host answers 200.
@@ -29,14 +29,24 @@ openstack loadbalancer listener create --name finance-http --protocol HTTP --pro
 openstack loadbalancer pool create --name finance-pool --lb-algorithm ROUND_ROBIN --listener finance-http --protocol HTTP
 openstack loadbalancer member create --name w1 --subnet-id private_subnet --address 10.0.1.237 --protocol-port 30080 finance-pool   # w2, w3 likewise
 openstack loadbalancer healthmonitor create --name finance-hm --type HTTP --url-path /health --expected-codes 200 --delay 5 --timeout 3 --max-retries 3 finance-pool
-openstack loadbalancer pool create --name argo-pool --lb-algorithm ROUND_ROBIN --loadbalancer finance-lb --protocol HTTP
-openstack loadbalancer member create --name w1 --subnet-id private_subnet --address 10.0.1.237 --protocol-port 30443 argo-pool     # w2, w3 likewise
-openstack loadbalancer healthmonitor create --name argo-hm --type HTTP --url-path /healthz --expected-codes 200 --delay 5 --timeout 3 --max-retries 3 argo-pool
-openstack loadbalancer l7policy create --name argo --action REDIRECT_TO_POOL --redirect-pool argo-pool finance-http
-openstack loadbalancer l7rule create --type HOST_NAME --compare-type EQUAL_TO --value argo.rdulinux.com argo
 FIP=$(openstack floating ip create external_network -c floating_ip_address -f value)
 openstack floating ip set --port $(openstack loadbalancer show finance-lb -c vip_port_id -f value) $FIP
 ```
+
+### `argo-lb` (Argo CD, its own load balancer)
+Argo used to be a second pool on `finance-lb`, selected by Host header (L7 policies `argo` / `argo-host`). On 2026-10-20 it moved
+to a load balancer of its own, so a problem or change on one never touches the other. The policies and `argo-pool` were deleted
+from `finance-lb` after DNS pointed at the new address.
+```bash
+openstack loadbalancer create --name argo-lb --vip-subnet-id private_subnet     # no flavor = SINGLE (one amphora); add --flavor ha for ACTIVE_STANDBY
+openstack loadbalancer listener create --name argo-http --protocol HTTP --protocol-port 80 --insert-headers X-Forwarded-For=true argo-lb
+openstack loadbalancer pool create --name argo-backend --lb-algorithm ROUND_ROBIN --listener argo-http --protocol HTTP
+openstack loadbalancer member create --name wN --subnet-id private_subnet --address <private ip> --protocol-port 30443 argo-backend   # per worker
+openstack loadbalancer healthmonitor create --name argo-backend-hm --type HTTP --url-path /healthz --expected-codes 200 --delay 5 --timeout 3 --max-retries 3 argo-backend
+FIP=$(openstack floating ip create external_network -c floating_ip_address -f value)
+openstack floating ip set --port $(openstack loadbalancer show argo-lb -c vip_port_id -f value) $FIP    # 192.168.2.113
+```
+DNS (`infra/infra.yaml`): `argo` -> 192.168.2.113 with PTR. Wait for each step to leave `PENDING_*` before the next.
 
 ## Pitfalls we hit (all fixed)
 - **VIP network must not be the amphora management network.** Putting the VIP on `external_network` (also `amp_boot_network_list`)
@@ -53,7 +63,7 @@ openstack floating ip set --port $(openstack loadbalancer show finance-lb -c vip
   `openstack server list` return 500 (`KeyError` in `servers/detail`). Delete that instance by id.
 
 ## Cutover (done 2026-10-20) and rollback
-The load balancer now owns **192.168.2.5**, the finance front door (public entry and `argo.rdulinux.com` all point there).
+The load balancer now owns **192.168.2.5**, the finance front door (the public entry points there; Argo has its own load balancer, see `argo-lb`).
 It was done by swapping floating IPs, which is atomic in Neutron (151 probe requests, 0 failed; first answer from the load balancer 2 s later):
 ```bash
 openstack floating ip unset --port 192.168.2.119                              # free .119 from the LB
@@ -78,11 +88,11 @@ Before this, Terraform had to adopt `.119` as the VM's floating IP (`terraform s
 so that it would not re-attach `.5`; that is no longer relevant.
 
 ## Workers change over time (pools are static)
-Octavia pools do not follow Kubernetes nodes. When a worker is added or retired, edit BOTH pools by hand:
+Octavia pools do not follow Kubernetes nodes. When a worker is added or retired, edit BOTH load balancers by hand (`finance-pool` on `finance-lb`, `argo-backend` on `argo-lb`):
 ```bash
 openstack loadbalancer member create --name wN --subnet-id private_subnet --address <private ip> --protocol-port 30080 finance-pool
-openstack loadbalancer member create --name wN --subnet-id private_subnet --address <private ip> --protocol-port 30443 argo-pool
-openstack loadbalancer member delete finance-pool wN   # and argo-pool, BEFORE draining/powering off a node
+openstack loadbalancer member create --name wN --subnet-id private_subnet --address <private ip> --protocol-port 30443 argo-backend
+openstack loadbalancer member delete finance-pool wN   # and argo-backend, BEFORE draining/powering off a node
 ```
 History: `w4`, `w5` added and `w1` retired on 2026-10-20 (drain with `--ignore-daemonsets --delete-emptydir-data`; the finance
 Deployments have PodDisruptionBudgets with minAvailable 2 and a required anti-affinity, so a drain never takes two copies).
