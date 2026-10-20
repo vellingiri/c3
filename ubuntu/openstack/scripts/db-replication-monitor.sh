@@ -40,9 +40,9 @@ problems=(); primaries=(); replicas=(); summary=()
 for pair in $DB_HOSTS; do
   name=${pair%%=*}; ip=${pair#*=}
   if ! rec=$(q "$ip" "select pg_is_in_recovery()") || [ -z "$rec" ]; then
-    problems+=("$name ($ip) is unreachable or refused the monitor login"); summary+=("$name: unreachable"); continue
+    problems+=("$name ($ip) is unreachable or refused the monitor login"); summary+=("$name unreachable"); continue
   fi
-  if [ "$rec" = f ]; then primaries+=("$name=$ip"); summary+=("$name: primary"); else replicas+=("$name=$ip"); summary+=("$name: replica"); fi
+  if [ "$rec" = f ]; then primaries+=("$name=$ip"); summary+=("$name primary"); else replicas+=("$name=$ip"); summary+=("$name replica"); fi
 done
 
 if [ ${#primaries[@]} -gt 1 ]; then problems+=("TWO writable primaries (${primaries[*]%%=*}): split brain, stop one now")
@@ -54,7 +54,7 @@ if [ ${#primaries[@]} -eq 1 ]; then
   [ "${n:-0}" -ge 1 ] || problems+=("primary $pname has no streaming replica (redundancy lost)")
   lag=$(q "$pip" "select coalesce(max(pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn)), 0)::bigint from pg_stat_replication" || echo 0)
   [ "${lag:-0}" -le "$LAG_BYTES" ] || problems+=("replica is $((lag / 1048576)) MB behind $pname")
-  summary+=("lag: ${lag:-?} bytes")
+  summary+=("lag ${lag:-?} bytes")
   inactive=$(q "$pip" "select string_agg(slot_name, ',') from pg_replication_slots where slot_type = 'physical' and not active")
   [ -z "$inactive" ] || problems+=("replication slot(s) inactive on $pname: $inactive (WAL is piling up)")
   big=$(q "$pip" "select string_agg(slot_name || ' ' || pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)), ',') from pg_replication_slots where pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) > $SLOT_BYTES")
@@ -67,7 +67,8 @@ for r in "${replicas[@]:-}"; do
   [ "$st" = streaming ] || problems+=("replica $rname receiver status is '${st:-unknown}', not streaming")
 done
 
-echo "$(date -Is) ${summary[*]}"
+line=$(IFS=,; echo "${summary[*]}"); line=${line//,/, }   # "db1 primary, db2 replica, lag 0 bytes"
+echo "$(date -Is) $line"
 for p in "${problems[@]:-}"; do [ -n "$p" ] && echo "PROBLEM: $p"; done
 [ "$MODE" = dry ] && { [ ${#problems[@]} -eq 0 ]; exit $?; }
 
@@ -75,12 +76,12 @@ mkdir -p "$(dirname "$STATE_FILE")"
 prev=$(cat "$STATE_FILE" 2>/dev/null || echo ok)
 now=$(date +%s)
 if [ ${#problems[@]} -eq 0 ]; then
-  if [ "${prev%% *}" = fail ]; then notify "db replication recovered" default "white_check_mark" "${summary[*]}"; fi
+  if [ "${prev%% *}" = fail ]; then notify "db replication recovered" default "white_check_mark" "$line"; fi
   echo ok > "$STATE_FILE"; exit 0
 fi
 
 sig=$(printf '%s\n' "${problems[@]}" | cksum | cut -d' ' -f1)
-body=$(printf '%s\n' "${problems[@]}"; echo "${summary[*]}")
+body=$(printf '%s\n' "${problems[@]}"; echo "$line")
 if [ "${prev%% *}" != fail ] || [ "$(echo "$prev" | cut -d' ' -f2)" != "$sig" ]; then
   notify "db replication PROBLEM" urgent "rotating_light" "$body"; echo "fail $sig $now" > "$STATE_FILE"
 elif [ $((now - $(echo "$prev" | cut -d' ' -f3))) -ge "$REMIND_SECONDS" ]; then
