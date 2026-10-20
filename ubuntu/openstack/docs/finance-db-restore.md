@@ -39,4 +39,4 @@ then swap names (or restore over `financedb` after dropping it), and scale the b
 
 ## Data that is not in the database
 `repo:/exports/finance-qa/{uploads,logs,backups}` (NFS, single copy). A tarball safety copy of `uploads` and `backups`
-was taken before the 2026-10-19 prod rebuild: `backup:/backup/finance-qa/pre-rebuild-20261019/` (root only).
+was taken before the 2026-10-19 prod rebuild: `s3:/backup/finance-qa/pre-rebuild-20261019/` (the host was called `backup` then) (root only).

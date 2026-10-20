@@ -10,7 +10,7 @@ Commands you need every week, and a "is everything healthy?" sweep. Details live
 | `ssh c1.prod` `ssh w2.qa` | `<name>.<env>.rdulinux.com` | any VM, either environment (`w1` exists in both: `ssh w1.prod`, `ssh w1.qa`) |
 | `ssh db1` `ssh db2` `ssh dbw1` | the two database VMs and the etcd tie-breaker VM | key `id_ed25519.c3`. On db1/db2: `patronictl list` |
 | `ssh db` | whoever `db.rdulinux.com` points at (the primary) | after a failover your Mac may cache the old answer: `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` |
-| `ssh runner` `ssh repo` `ssh backup` `ssh c3` | shared services and the cloud host | key `id_ed25519.c3` |
+| `ssh runner` `ssh repo` `ssh s3` (was `backup`) `ssh c3` | shared services and the cloud host | key `id_ed25519.c3` |
 `/opt/c3/bin/mssh host1 host2 ...` opens synchronized tmux panes (type once, runs on all).
 The old `haproxy` and `qa` aliases are gone: the VM and the name were retired (`../CHANGELOG.md`).
 

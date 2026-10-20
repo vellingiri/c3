@@ -27,7 +27,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 |---|---|---|---|
 | `c3` | 192.168.2.2 | n/a | the cloud host: OpenStack (Debian packages) and the DNS server (Designate). **Rebooting it takes everything down; the VMs restart by themselves and both front doors return about 3 minutes after `c3` is reachable (proven with two plain reboots on 2026-10-20): `c3-reboot.md`, `amphora-reboot-fix.md`** |
 | `repo` | 192.168.2.3 | n/a | NFS server: VM images, finance logs, uploads and backups (`/exports/finance-qa/...`); VMs mount a share at `/nfsshare` (join files, etcd snapshots) |
-| `backup` | 192.168.2.4 | n/a | backup host (off-host copies, e.g. `/backup/finance-qa/pre-rebuild-20261019/`) |
+| `s3` (was `backup`) | 192.168.2.4 | n/a | MinIO S3 (Terraform state, `:9000`) and the off-host backups (NFS `/backup`, e.g. `/backup/finance-qa/pre-rebuild-20261019/`); renamed from `backup` on 2026-10-20 |
 | `finance` | 192.168.2.5 | VIP 10.0.1.89 | the finance app, served by Octavia `finance-lb` |
 | `argo` | 192.168.2.113 | VIP 10.0.1.56 | Argo CD, served by Octavia `argo-lb` |
 | `db1` | 192.168.2.124 | 10.0.1.191 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **primary**) (m1.small) |
@@ -95,7 +95,7 @@ after `db2` and `argo-lb`. A new `m1.small` is 4 GB, an `m1.tiny` 2 GB, an ampho
 |---|---|---|
 | Finance database | hourly and daily `pg_dump` to NFS; streaming replica with **automatic failover** (Patroni, 3-member etcd; losing any one of db1/db2/dbw1 is survived, losing two is not); alerts on replica, Patroni and witness health | `finance-db-restore.md`, `db-ha-patroni.md` |
 | Kubernetes state | etcd snapshot timer on each controller (`/var/backups/etcd`, copied to NFS) | `etcd-restore-rehearsal.md` |
-| Files (uploads, logs) | NFS on `repo`; a tarball copy on `backup` before risky work | `prod-k8s-rebuild.md` |
+| Files (uploads, logs) | NFS on `repo`; a tarball copy on `s3` before risky work | `prod-k8s-rebuild.md` |
 | Terraform state | S3 (MinIO) bucket with locking | `../README.md` |
 | The cluster itself | rebuildable from `nodes.yaml` + cloud-init; workloads come back from Argo CD + the three secrets | `prod-k8s-rebuild.md` |
 

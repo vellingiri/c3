@@ -172,7 +172,7 @@ Result: prod VMs rebuilt with correct hostnames and node names; no user-visible 
 
 - **Gate before touching anything:** the finance DB backup was restored into a scratch database (85/85 tables, identical row
   counts) and an etcd snapshot restore was rehearsed on QA first. See `finance-db-restore.md` and `etcd-restore-rehearsal.md`.
-  A safety tarball of NFS `uploads` + `backups` went to `backup:/backup/finance-qa/pre-rebuild-20261019/`.
+  A safety tarball of NFS `uploads` + `backups` went to `s3:/backup/finance-qa/pre-rebuild-20261019/` (the host was called `backup` then).
 - **Argo manages everything in `finance`** (namespace, PVs/PVCs, NetworkPolicies, Services, Deployments, CronJobs) with
   `automated: {prune, selfHeal}`. So only what is NOT in git had to be copied: the 3 finance secrets, Argo's repo credentials,
   `argocd-secret` (keeps the admin login) and the `server.insecure` setting in `argocd-cmd-params-cm`.
