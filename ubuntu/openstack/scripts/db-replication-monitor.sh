@@ -17,7 +17,7 @@ CONFIG=${DB_MONITOR_CONFIG:-/etc/default/db-monitor}
 : "${LAG_BYTES:=16777216}"                          # 16 MB of WAL not yet replayed
 : "${SLOT_BYTES:=1610612736}"                       # slot keeps 1.5 GB (the cap is 2 GB, then the replica must be rebuilt)
 : "${REMIND_SECONDS:=21600}"
-: "${WITNESS:=dbw=10.0.1.120}"                   # name=ip of the etcd tie-breaker VM
+: "${WITNESS:=dbw=10.0.1.120 dbw2=10.0.1.121 dbw3=10.0.1.122}"   # name=ip of each etcd witness VM (space separated)
 : "${PATRONI_PORT:=8008}"
 : "${STATE_FILE:=/var/lib/db-monitor/state}"
 : "${NTFY_URL:=}"
@@ -106,8 +106,14 @@ for x in m:
 print("; ".join(out))' "$want" "$LAG_BYTES" 2>/dev/null)
   [ -z "$cmsg" ] || problems+=("Patroni cluster: $cmsg")
 fi
-wname=${WITNESS%%=*}; wip=${WITNESS#*=}
-timeout 4 bash -c "echo > /dev/tcp/$wip/22" 2>/dev/null || problems+=("the witness VM $wname ($wip) is not answering: if one more machine fails there is no quorum and no automatic failover")
+# etcd voters: db1, db2 and the witnesses. With 5 voters any 2 may be down; with 3 (a witness missing), any 1. Report each silent witness.
+wdown=0; wtotal=0
+for w in $WITNESS; do
+  wname=${w%%=*}; wip=${w#*=}; wtotal=$((wtotal+1))
+  if ! timeout 4 bash -c "echo > /dev/tcp/$wip/22" 2>/dev/null; then
+    wdown=$((wdown+1)); problems+=("the witness VM $wname ($wip) is not answering: etcd has $((2+wtotal-wdown)) of $((2+wtotal)) voters left, automatic database failover needs a majority ($(( (2+wtotal)/2+1 )))")
+  fi
+done
 line=$(IFS=,; echo "${summary[*]}"); line=${line//,/, }   # "db1 primary, db2 replica, lag 0 bytes"
 echo "$(date -Is) $line"
 for p in "${problems[@]:-}"; do [ -n "$p" ] && echo "PROBLEM: $p"; done

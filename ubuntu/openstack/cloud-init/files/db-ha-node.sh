@@ -140,7 +140,8 @@ if [ "$ROLE" = database ]; then
   [ -f "$CONF/postgresql.base.conf" ] || cp -a "$CONF/postgresql.conf" "$CONF/postgresql.base.conf"
   find "$DATA" -mindepth 1 -delete          # first boot: whatever the package created; Patroni fills it (initdb or copy of the leader)
   HBA_POSTGRES=""
-  for ip in $(echo "$MEMBERS" | tr ',' '\n' | grep -v "^${WITNESS}=" | awk -F= '{print $2}'); do
+  # the witnesses (a comma separated list of names) are not database hosts: only db1/db2-type members may log in as postgres
+  for ip in $(echo "$MEMBERS" | tr ',' '\n' | awk -F= -v w=",${WITNESS}," 'index(w, "," $1 ",")==0 {print $2}'); do
     HBA_POSTGRES="$HBA_POSTGRES
     - host all postgres $ip/32 scram-sha-256"
   done

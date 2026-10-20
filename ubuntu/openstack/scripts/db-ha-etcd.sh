@@ -9,7 +9,7 @@
 # "install" refuses to run when a cluster already exists on a host (a data directory is present): re-forming would lose the leader key.
 set -euo pipefail
 
-HOSTS=(db1 db2 dbw)
+HOSTS=(db1 db2 dbw dbw2 dbw3)
 TOKEN=finance-db-ha
 
 ip_of() { ssh "$1" "hostname -I | awk '{print \$1}'"; }
@@ -25,13 +25,13 @@ install() {
   # (plain arrays: macOS ships bash 3.2, which has no associative arrays)
   local IPS=() i h cluster="" members=""
   for h in "${HOSTS[@]}"; do IPS+=("$(ip_of "$h")"); done
-  for i in 0 1 2; do cluster+="${HOSTS[$i]}=http://${IPS[$i]}:2380,"; members+="${IPS[$i]},"; done
+  for i in $(seq 0 $((${#HOSTS[@]}-1))); do cluster+="${HOSTS[$i]}=http://${IPS[$i]}:2380,"; members+="${IPS[$i]},"; done
   cluster=${cluster%,}; members=${members%,}
   echo "cluster: $cluster"
   for h in "${HOSTS[@]}"; do
     if ssh "$h" "test -d /var/lib/etcd/db-ha"; then echo "$h already has /var/lib/etcd/db-ha; refusing to re-form the cluster (use 'status')" >&2; exit 1; fi
   done
-  for i in 0 1 2; do
+  for i in $(seq 0 $((${#HOSTS[@]}-1))); do
     h=${HOSTS[$i]}; ip=${IPS[$i]}
     echo "== $h ($ip): packages, config, firewall"
     ssh "$h" "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq etcd-server etcd-client nftables >/dev/null 2>&1; systemctl stop etcd; rm -rf /var/lib/etcd/default"

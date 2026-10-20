@@ -30,12 +30,12 @@ BACKUP=/root/db-ha-backup-$(date +%Y%m%d)
 
 ip_of() { ssh "$1" "hostname -I | awk '{print \$1}'"; }
 pgq() { ssh "$1" "sudo -u postgres psql -X -qAt -v ON_ERROR_STOP=1 -c \"$2\""; }
-etcd_eps() { local e="" h; for h in db1 db2 dbw; do e+="$(ip_of "$h"):2379,"; done; echo "${e%,}"; }
+etcd_eps() { local e="" h; for h in db1 db2 dbw dbw2 dbw3; do e+="$(ip_of "$h"):2379,"; done; echo "${e%,}"; }
 pctl() { ssh "$1" "sudo -u postgres patronictl -c $CFG $2"; }
 
 need_etcd() {
   local out; out=$(ssh db1 "ETCDCTL_API=3 etcdctl --endpoints=$(etcd_eps | sed 's/\([0-9.]*:2379\)/http:\/\/\1/g') endpoint health 2>&1" || true)
-  [ "$(echo "$out" | grep -c 'is healthy')" = 3 ] || { echo "etcd is not healthy on all three members:" >&2; echo "$out" >&2; exit 1; }
+  [ "$(echo "$out" | grep -c 'is healthy')" -ge 3 ] || { echo "etcd is not healthy on all three members:" >&2; echo "$out" >&2; exit 1; }
 }
 
 secret() { # secret <yaml path as python expr on d>  -> value from the existing config on db1, or empty
