@@ -44,6 +44,9 @@ curl -s -o /dev/null -w '%{http_code}\n' http://finance.rdulinux.com/health
 5. Existing pods stay where they are. To use the new node, roll the apps one by one: `k rollout restart deploy/backend` (then `frontend`, `docs`, `nginx`),
    waiting for each (`k rollout status deploy/backend`). Anti-affinity picks a node without a copy.
 
+## Retire any node (script) / what not to do
+Use **`scripts/k8s-retire-node.sh <env> <node>`** (drain, etcd member removal for control-plane nodes, node delete) and only then edit `nodes.yaml` and apply. Destroying a VM first leaves a `NotReady` node object and, for a control-plane node, a dead etcd member that can cost the cluster its etcd majority (the API hangs): `k8s-ha-control-plane.md`, "Removing a node". The manual steps below are what the script does for a worker.
+
 ## Retire a worker (the order matters)
 1. **Remove it from both pools first** (`openstack loadbalancer member delete finance-pool wN`, `... argo-backend wN`). Traffic stops going there within seconds.
    (If you forget, traffic still works: any node forwards NodePort traffic through kube-proxy. But the node's health check will start failing once it is drained.)

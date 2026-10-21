@@ -47,6 +47,17 @@ A **new** cluster built from nothing: create the load balancer first (step 1, wi
 - **CoreDNS had both replicas on `c1`.** In the prod drill `c1` was powered off and started again, and after it came back both CoreDNS pods and the calico controller stayed `Unknown`: cluster DNS was down (the front door kept answering 200, apps use the database by address) until the pods were force-deleted and recreated. Fix, live on prod and cka: CoreDNS **3 replicas with a topology spread over nodes** (`maxSkew 1`, `kubernetes.io/hostname`), and the same patch at the end of `k8s-controller.yaml.tftpl` for new clusters. After a hard power-off of any node, look at `kubectl -n kube-system get pods | grep -v Running`: pods stuck `Unknown` on a node that is back are deleted with `--force --grace-period=0`.
 - `kubeadm join` of two control planes at the same moment is fragile (etcd adds one member at a time): `join_delay` staggers them.
 
+## Removing a node (do this BEFORE the VM is destroyed)
+`scripts/k8s-retire-node.sh <env> <node>` drains the node, removes a control-plane node's **etcd member** while etcd still has its majority, and deletes the node object; then comment the node out in `environments/<env>/nodes.yaml` and `terraform apply` (the API load balancer member goes by itself). 
+**What happens if the VM is just destroyed (2026-10-21, cka):** `c2` and `c3` were commented out in `nodes.yaml` and applied without that. Their etcd members stayed in the cluster, so etcd (3 members) had 1 of 3 left, **no majority: the API on `c1` hung** (`TLS handshake timeout` / `EOF` through `api.cka.rdulinux.com`), and the dead nodes would have stayed `NotReady`. The same applies to a dead worker (`qa` `w3`): its node object stays `NotReady` until `kubectl delete node`.
+Recovery when etcd has lost its majority and the missing members are never coming back (on the surviving control-plane node, here `c1`; the cluster is read-only/dead until this is done):
+1. Keep copies: the newest snapshot from `/var/backups/etcd` and a tarball of `/var/lib/etcd`.
+2. Add `- --force-new-cluster` after `- --name=<node>` in `/etc/kubernetes/manifests/etcd.yaml` (kubelet restarts the etcd pod); wait until `etcdctl endpoint health` answers; `etcdctl member list` now shows only this member.
+3. Put the manifest back **without** the flag (it must not stay: it would reset membership at every restart).
+4. `kubectl delete node <dead nodes>`; check `kubectl get endpoints kubernetes -n default` lists only the live API servers; the load balancer members of deleted VMs are removed by the reconciler.
+5. To grow back to three control planes: create the VMs again (`controller_join`), they join and are added to etcd by `kubeadm join`.
+The cause is always the same: a node removed from the cluster by deleting its VM instead of by `k8s-retire-node.sh`.
+
 ## Limits and care
 - Three control-plane nodes tolerate **one** failure (etcd majority). Two at once, and the API is read-only/unavailable until one is back (workloads keep running).
 - Everything still runs on one host (`c3`). The load balancer, the control planes and the workers go down together with it.
