@@ -11,7 +11,7 @@ Nothing is open (2026-10-20).
 - Database replication is synchronous but not strict: a standby outage means about 35 s of paused writes, then asynchronous until it returns (`db-ha-patroni.md`).
 - Losing three of the five etcd machines (`dbw1`, `dbw2`, `dbw3`, `db1`, `db2`) stops automatic database failover; any two are survived. Emergency steps: `db-ha-patroni.md`. Everything runs on one host (`c3`), so a host loss still takes everything.
 - A really dead amphora is replaced automatically after 5 minutes (`heartbeat_timeout = 300`) or at once with `openstack loadbalancer failover <lb>`; both load balancers have a standby (`amphora-reboot-fix.md`).
-- Three control-plane nodes tolerate one failure (prod, cka; `qa` still has one, a spare), and everything runs on one host (`k8s-ha-control-plane.md`).
+- Three control-plane nodes tolerate one failure (prod; `qa` and `cka` have one each), and everything runs on one host (`k8s-ha-control-plane.md`).
 
 ## Done recently (so nobody redoes it)
 Cinder removed from the catalog (2026-10-20; backups in `/root/backups/cinder-removal-20261020` on `c3` and `/root/backups/c3-cinder-removal-20261020.tgz` on `s3` (the host formerly called `backup`), restore steps inside);

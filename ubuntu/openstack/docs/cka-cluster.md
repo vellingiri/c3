@@ -26,6 +26,11 @@ kubectl --kubeconfig ~/.kube/cka get nodes        # c1 and w1..w3 Ready after th
 ```
 If the workers do not join: `ssh w1.cka tail -20 /var/log/cloud-init-output.log`; the join command file is `/nfsshare/join-cka.sh` on the NFS share (it is per cluster, so it cannot collide with prod or qa).
 
+## Rebuild from scratch (what was done 2026-10-21)
+1. `ssh repo 'rm -f /nfsshare/join-cka.sh /nfsshare/join-cp-cka.sh'`: **stale join files on the NFS share** are picked up by new workers (they wait for the file and use whatever is there), so they would try the OLD cluster's token.
+2. `cd environments/cka && terraform destroy && terraform apply`. The load balancer `cka-api` and the DNS name stay; the reconciler on `c3` swaps its member to the new `c1`.
+3. Refetch the kubeconfig (the CA is new): `ssh c1.cka 'cat $HOME/.kube/config' | sed 's/kubernetes-admin@kubernetes/cka/g; s/kubernetes-admin/cka-admin/g; s/name: kubernetes$/name: cka/; s/cluster: kubernetes$/cluster: cka/' > ~/.kube/cka` (quote the path so your Mac does not expand `~`).
+
 ## Tear down (frees all the memory and disk)
 ```bash
 cd /opt/c3/ubuntu/openstack/environments/cka && terraform destroy
@@ -37,4 +42,4 @@ Rebuilding from nothing later gives a fresh cluster with a new CA: fetch the kub
 - **Cluster upgrade with kubeadm:** the nodes install `kubeadm`/`kubelet`/`kubectl` from the v1.30 repo and hold them; to practise an upgrade point apt at the next minor repo, `kubeadm upgrade plan/apply`, drain, upgrade kubelet, uncordon.
 - **Add / remove a node:** change `nodes.yaml` and apply (`k8s-operations.md` has the drain and delete steps; same procedure).
 - **Troubleshooting drills:** `systemctl stop kubelet` on a worker, break a static pod manifest in `/etc/kubernetes/manifests`, change a certificate path, then repair.
-- **This cluster has three control-plane nodes** (`c1`, `c2`, `c3`) behind the API name `api.cka.rdulinux.com` (Octavia load balancer `cka-api`), built as the rehearsal for prod and drilled by powering `c1` off (`k8s-ha-control-plane.md`). Your kubeconfig `server:` is `https://api.cka.rdulinux.com:6443`. Practise etcd backup/restore and `kubeadm upgrade` on it as a real HA cluster.
+- **One control plane (`c1`) and three workers, recreated on 2026-10-21.** It was briefly an HA cluster (`c2`, `c3`, the rehearsal for prod, `k8s-ha-control-plane.md`); they were destroyed without leaving the cluster, etcd lost its majority and the API hung, so the whole cluster was destroyed and applied again. The cluster is still built through the API name `api.cka.rdulinux.com` (Octavia load balancer `cka-api`, not Terraform-managed, kept across rebuilds; the reconciler on `c3` points it at the new `c1` within a minute), so `~/.kube/cka` has `server: https://api.cka.rdulinux.com:6443`. **After every rebuild the CA is new: refetch the kubeconfig** (below). To add control planes again, put `c2`/`c3` (`role: controller_join`) back in `environments/cka/nodes.yaml`; to remove nodes later use `scripts/k8s-retire-node.sh cka <node>` first.

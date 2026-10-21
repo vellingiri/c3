@@ -33,7 +33,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | operations-cheatsheet.md | reference | current |
 | k8s-operations.md | runbook | current; node add/retire procedures follow the 2026-10-20 `w4`/`w5`/`w1` changes (rehearsed live) |
 | octavia-finance-lb.md | build record + runbook | current; load balancers created by hand |
-| k8s-ha-control-plane.md | design + proof | prod and cka built and drilled 2026-10-20 |
+| k8s-ha-control-plane.md | design + proof | prod built and drilled 2026-10-20 (cka rehearsed, now one control plane) |
 | s3-state-store.md | reference + runbook | state backups installed 2026-10-20 |
 | pending.md | status page | keep current; last updated 2026-10-20 |
 | cka-cluster.md | runbook | built and verified 2026-10-20 |

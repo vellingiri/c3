@@ -1,7 +1,7 @@
 # Highly available Kubernetes control plane (prod and cka: three control-plane nodes behind a load balancer)
 
 Built and drilled 2026-10-20. Before this, every cluster had **one** control-plane node (`c1`): if it died, the API (kubectl, deploys, scheduling, Argo CD) was gone until it was rebuilt
-(running pods kept serving). Now `prod` and `cka` have three control-plane nodes and one stable API address in front of them. `qa` still has one (spare cluster; the same steps apply).
+(running pods kept serving). Now `prod` has three control-plane nodes and one stable API address in front of them; `cka` was HA for the rehearsal and is back to one control plane behind the same kind of load balancer (recreated 2026-10-21, `cka-cluster.md`); `qa` has one (spare cluster; the same steps apply).
 
 ## The pieces
 | Piece | What / where |

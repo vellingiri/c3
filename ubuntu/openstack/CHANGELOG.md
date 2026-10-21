@@ -48,6 +48,8 @@ Update this file in the same commit as any change, and list anything done **by h
 ### 2026-10-21: nodes removed by destroying the VMs (cka c2/c3, qa w3)
 - `cka` `c2`/`c3` and `qa` `w3` were removed from `nodes.yaml` and the VMs destroyed without draining or leaving the cluster: `qa` `w3` stayed `NotReady` (node object deleted by hand), and `cka` lost its etcd majority (1 of 3 members), so its API timed out. New `scripts/k8s-retire-node.sh` (drain, etcd member removal, node delete) and the runbook in `docs/k8s-ha-control-plane.md` ("Removing a node", including the `--force-new-cluster` recovery). Prod was not affected.
 
+- **`cka` recreated** (1 controller + 3 workers) with `terraform destroy` + `apply` instead of repairing etcd: all four nodes Ready through `api.cka.rdulinux.com` without any manual step (the kubelet resolver fix in cloud-init worked), `cka-api` points at the new `c1`; the stale join files on the NFS share were removed first (a worker would otherwise pick up the old token). Kubeconfig refetched. Procedure and the stale-file trap in `docs/cka-cluster.md`.
+
 ### Two-amphora failover of `finance-lb` fixed (it was capacity)
 - Cause found: the replacement amphora is built before the old one is deleted, and under the old RAM ratio (1.1/1.2, then 1.5 with the new VMs) less than 2 GB was allocatable at that moment: Placement returned no candidates. `ram_allocation_ratio` **1.5 -> 1.7** on `c3` (nova.conf, backup `/root/nova.conf.bak-20261020-ratio17`; allowed 135,371 MB, allocated 118,784 MB). Two full `openstack loadbalancer failover finance-lb` runs: ACTIVE in 84 s and 78 s on the first try, 376 probes, none failed. **Real memory use is 67 of 80 GB: no more VMs without checking `free -m`.** The last item of `docs/pending.md` is gone.
 
