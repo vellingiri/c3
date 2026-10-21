@@ -22,6 +22,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | understand or undo the route that lets `c3` reach private VM addresses | [c3-host-route.md](c3-host-route.md) |
 | understand or operate the three-node Kubernetes control plane and its API load balancer | [k8s-ha-control-plane.md](k8s-ha-control-plane.md) |
 | the `s3` host: RustFS, where Terraform keeps every state, its backups and how to restore | [s3-state-store.md](s3-state-store.md) |
+| rebuild `c3` and everything on it from nothing (disaster recovery) | [c3-rebuild.md](c3-rebuild.md) |
 | see what is still open, waiting for a decision, or an accepted limit | [pending.md](pending.md) |
 | a VM replace failed with "Port ... is still in use" (Neutron policy fix on `c3`) | [port-unbind-fix.md](port-unbind-fix.md) |
 | why automatic database failover was designed this way | [db-auto-failover-plan.md](db-auto-failover-plan.md) (implemented) |
@@ -35,6 +36,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | octavia-finance-lb.md | build record + runbook | current; load balancers created by hand |
 | k8s-ha-control-plane.md | design + proof | prod built and drilled 2026-10-20 (cka rehearsed, now one control plane) |
 | s3-state-store.md | reference + runbook | state backups installed 2026-10-20 |
+| c3-rebuild.md | runbook + scripts | written 2026-10-21; capture verified read-only, installer NOT yet rehearsed |
 | pending.md | status page | keep current; last updated 2026-10-20 |
 | cka-cluster.md | runbook | built and verified 2026-10-20 |
 | port-unbind-fix.md | incident + fix | fixed and proven 2026-10-20 |

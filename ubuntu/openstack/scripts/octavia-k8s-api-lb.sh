@@ -11,7 +11,7 @@
 set -euo pipefail
 
 ENV_NAME=${1:?env (prod|qa|cka)}; MODE=${2:?single|ha|members}; shift 2
-[ $# -ge 1 ] || { echo "give at least one control-plane address" >&2; exit 2; }
+[ $# -ge 1 ] || [ "$MODE" != members ] || { echo "give at least one control-plane address" >&2; exit 2; }   # a new load balancer may start with no members: the reconciler on c3 adds control planes as they appear
 LB="$ENV_NAME-api"; LISTENER="$ENV_NAME-api-6443"; POOL="$ENV_NAME-api-pool"; HM="$ENV_NAME-api-hm"
 
 wait_lb() {
@@ -44,14 +44,16 @@ if [ "$MODE" != members ]; then
   openstack loadbalancer create --name "$LB" --vip-subnet-id private_subnet "${FLAVOR[@]}" -f value -c id >/dev/null; wait_lb
   openstack loadbalancer listener create --name "$LISTENER" --protocol TCP --protocol-port 6443 --timeout-client-data 3600000 --timeout-member-data 3600000 "$LB" >/dev/null; wait_lb
   openstack loadbalancer pool create --name "$POOL" --lb-algorithm ROUND_ROBIN --listener "$LISTENER" --protocol TCP >/dev/null; wait_lb
-  openstack loadbalancer healthmonitor create --name "$HM" --type TCP --delay 5 --timeout 3 --max-retries 3 "$POOL" >/dev/null; wait_lb
+  openstack loadbalancer healthmonitor create --name "$HM" --type TCP --delay 3 --timeout 2 --max-retries 2 "$POOL" >/dev/null; wait_lb
 fi
 
-echo "== members: $*"
-set_members "$@"
+echo "== members: ${*:-none yet}"
+[ $# -eq 0 ] || set_members "$@"
 
 if [ "$MODE" != members ]; then
-  FIP=$(openstack floating ip create external_network -c floating_ip_address -f value)
+  # FIP=<address> in the environment pins the floating IP (the disaster-recovery rebuild needs the old address back); otherwise any free one
+  if [ -n "${FIP:-}" ]; then openstack floating ip create --floating-ip-address "$FIP" external_network >/dev/null
+  else FIP=$(openstack floating ip create external_network -c floating_ip_address -f value); fi
   openstack floating ip set --port "$(openstack loadbalancer show "$LB" -c vip_port_id -f value)" "$FIP"
   echo "FIP=$FIP"
 fi
