@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the Terraform-state backup on the s3 host (hourly, to /backup/terraform-state) and a daily pull of it to c3 (/root/backups/terraform-state),
+# Install the Terraform-state backup on the s3 host (hourly, to /backup/terraform-state) and an hourly pull of it to c3 (/root/backups/terraform-state),
 # so the states exist on three disks: RustFS's own, another partition on s3, and a different machine. Re-runnable. Run from your Mac.
 #   scripts/install-s3-tfstate-backup.sh
 # Restore: docs/s3-state-store.md.
@@ -47,12 +47,12 @@ ExecStart=/usr/bin/rsync -a -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=no
 UNIT
 cat > /etc/systemd/system/tfstate-pull.timer <<'UNIT'
 [Unit]
-Description=daily pull of the Terraform state snapshots
+Description=hourly pull of the Terraform state snapshots
 
 [Timer]
-OnCalendar=*-*-* 03:30:00
+OnCalendar=*-*-* *:35:00
 Persistent=true
-RandomizedDelaySec=300
+RandomizedDelaySec=120
 
 [Install]
 WantedBy=timers.target
