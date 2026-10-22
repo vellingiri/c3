@@ -32,7 +32,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 | `argo` | 192.168.2.113 | VIP 10.0.1.56 | Argo CD, served by Octavia `argo-lb` |
 | `db1` | 192.168.2.124 | 10.0.1.191 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **primary**) (m1.small) |
 | `db2` | 192.168.2.135 | 10.0.1.69 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **replica**) (m1.small) |
-| `dbw1` `dbw2` `dbw3` | floating IPs per VM | 10.0.1.120, .121, .122 | the three witnesses: etcd voters only, no data (m1.tiny); five voters with db1 and db2 |
+| `dbw1` | floating IP per VM | 10.0.1.120 | the witness: etcd voter only, no data (m1.tiny); three voters with db1 and db2 (`dbw2`, `dbw3` existed 2026-10-20 to 2026-10-22) |
 | `db` | 192.168.2.124 (TTL 60) | n/a | alias of the current primary; edit `infra.yaml` to fail over |
 | `runner` | 192.168.2.144 | 10.0.1.47 | GitHub Actions self-hosted runner + the replication monitor (m1.large) |
 | `@`, `www`, `rdu` | 13.140.58.46 | n/a | public address (not a lab VM) |

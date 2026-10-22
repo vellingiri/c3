@@ -35,9 +35,10 @@ nodes:
   db2: { role: database, ip: 10.0.1.69, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
   # dbw1 (was db-witness until 2026-10-20): third voter (etcd only) so the database pair can fail over automatically without split brain.
   dbw1: { role: witness, ip: 10.0.1.120, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
-  # dbw2, dbw3: two more witnesses (2026-10-20): 5 etcd voters, so any TWO machines of db1/db2/dbw1/dbw2/dbw3 may be down and the database still fails over by itself.
-  dbw2: { role: witness, ip: 10.0.1.121, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
-  dbw3: { role: witness, ip: 10.0.1.122, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
+  # dbw2, dbw3: two more witnesses were added on 2026-10-20 (5 etcd voters) and REMOVED on 2026-10-22 to save memory on c3 (3 voters again).
+  # They left etcd first (scripts/db-ha-etcd-shrink.sh); to bring them back uncomment them, run scripts/db-ha-etcd-grow.sh firewall, apply.
+  #dbw2: { role: witness, ip: 10.0.1.121, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
+  #dbw3: { role: witness, ip: 10.0.1.122, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
   # runner has default + k8s SGs, which equal the defaults, so no override needed.
   runner: { role: runner, flavor: m1.medium, domain: rdulinux.com }   # was m1.large until 2026-10-22: it uses ~0.5 GB idle; resized in place (docs/c3-reboot.md)
 

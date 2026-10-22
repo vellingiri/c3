@@ -9,7 +9,7 @@ background document). Now **Patroni** on `db1` and `db2` decides who is primary,
 |---|---|---|
 | PostgreSQL 16 | `db1` (10.0.1.191), `db2` (10.0.1.69) | one primary (read-write), one streaming replica. **Run by Patroni**; `postgresql@16-main` is masked on both |
 | Patroni 3.2.2 | `db1`, `db2` | keeps a leader key in etcd, promotes / demotes / re-attaches PostgreSQL. Config `/etc/patroni/config.yml` (root/postgres only, holds passwords) |
-| etcd 3.4 (**5 members** since 2026-10-20) | `db1`, `db2` and the three witnesses **`dbw1`** (10.0.1.120), **`dbw2`** (10.0.1.121), **`dbw3`** (10.0.1.122), all m1.tiny | the shared notebook that says who is leader. With five voters **any two machines** can be lost and the other three still agree (a majority is 3 of 5) |
+| etcd 3.4 (**3 members**; 5 from 2026-10-20 to 2026-10-22) | `db1`, `db2` and the witness **`dbw1`** (10.0.1.120, m1.tiny) | the shared notebook that says who is leader. With three voters **any one machine** can be lost and the other two still agree (a majority is 2 of 3). Two more witnesses (`dbw2`, `dbw3`) made it five voters; they were removed to give memory back to `c3`, see "Five etcd members" |
 | `dbw1` | prod VM, Terraform role `witness` | does nothing except run etcd (tie-breaker). Holds no data |
 | App connection | `DATABASE_URL` lists both DB hosts with `target_session_attrs=read-write` | the app finds the writable one itself; no DNS change needed |
 | `db.rdulinux.com` | still a DNS alias for the *original* primary | **not used by the app any more and not updated on failover**; do not rely on it |
@@ -17,7 +17,7 @@ background document). Now **Patroni** on `db1` and `db2` decides who is primary,
 Settings that matter: leader key TTL 30 s, loop 10 s, `maximum_lag_on_failover` 1 MB (a replica further behind is never promoted),
 `failsafe_mode` on, `use_pg_rewind` on (an old primary rejoins as a replica by itself), replication **synchronous** (`synchronous_mode: true`, `synchronous_node_count: 1`, not strict; switched on 2026-10-20, see "Synchronous replication").
 
-Security: etcd has no TLS or login, so an nftables table `etcd_guard` on every member allows ports 2379/2380 only from the five members
+Security: etcd has no TLS or login, so an nftables table `etcd_guard` on every member allows ports 2379/2380 only from the voters (three now)
 and localhost, and Patroni's REST port 8008 only from 10.0.1.0/24 (writes need the `patroni` user/password from `config.yml`).
 
 ## Look at it (everyday)
@@ -63,7 +63,7 @@ Change PostgreSQL settings with `patronictl edit-config` (cluster-wide, stored i
 | Symptom | Do |
 |---|---|
 | Replica `stopped` / lagging after a long outage | `ssh db1 patronictl reinit finance-db <replica>` rebuilds it from the leader (data copy; the app is not affected) |
-| No leader, both nodes say "demoted" / "failsafe" | etcd lost its majority (**three or more of the five** voters down; two are survived). Bring the missing VMs back first (`openstack server start`, or `terraform apply -replace=...` for a dead one); Patroni recovers on its own. Only if they cannot be brought back, use "Emergency: no etcd majority" below |
+| No leader, both nodes say "demoted" / "failsafe" | etcd lost its majority (**two or more of the three** voters down; with five voters two were survived). Bring the missing VMs back first (`openstack server start`, or `terraform apply -replace=...` for a dead one); Patroni recovers on its own. Only if they cannot be brought back, use "Emergency: no etcd majority" below |
 | Need to force a failover while the leader is alive | `patronictl failover finance-db --candidate db2 --force` |
 | App returns 503 "service busy" for more than ~1 minute after a failover | check `patronictl list` first. If a leader exists, restart the backend pods: `kubectl -n finance rollout restart deploy/backend` (prod kubeconfig) |
 | Monitor says "Patroni on dbX is not answering" | `ssh dbX systemctl status patroni`, `journalctl -u patroni -n 50` |
@@ -71,7 +71,8 @@ Change PostgreSQL settings with `patronictl edit-config` (cluster-wide, stored i
 | Replace the witness | create a new `witness` VM, `etcdctl member remove <old id>` / `member add`, start etcd with `ETCD_INITIAL_CLUSTER_STATE=existing` (scripts/db-ha-etcd.sh is for first install only and refuses to run over an existing cluster) |
 | Go back to plain PostgreSQL | `scripts/db-ha-patroni.sh rollback` (read it first; it stops Patroni, unmasks `postgresql@16-main`, restores the Debian config copies in `/root/db-ha-backup-20261020`) |
 
-## Five etcd members (since 2026-10-20)
+## Five etcd members (2026-10-20 to 2026-10-22), then back to three
+**On 2026-10-22 the group went back to three voters** (`db1`, `db2`, `dbw1`) because `c3` was out of real memory (the two extra witnesses used about 1.5 GB each; the host had killed a VM with the out-of-memory killer the day before, `c3-rebuild.md`). What that costs: **the double failure "witness plus one database" stops automatic failover again** (bring a VM back, or the emergency procedure below); everything else is as before. The removal was done safely, `scripts/db-ha-etcd-shrink.sh apply dbw3 dbw2` (Patroni's host list cut to three addresses, members removed from etcd one at a time while all five were healthy, firewall updated), and only then were the VMs commented out in `nodes.yaml`. **Never destroy a witness VM before its etcd member is removed.** To go back to five: uncomment `dbw2`/`dbw3`, `scripts/db-ha-etcd-grow.sh firewall`, apply, `scripts/db-ha-etcd-grow.sh patroni-hosts`. The text below describes the five-voter period and the drill.
 `dbw2` and `dbw3` were added to `environments/prod/nodes.yaml` (role `witness`, m1.tiny, fixed addresses). They build themselves from cloud-init (`cloud-init/files/db-ha-node.sh`): each found the running etcd cluster and joined with `member add`
 (two joining at once is handled: the second waits and retries while etcd says `unhealthy cluster`). Steps done for the three machines that already existed, scripted in `scripts/db-ha-etcd-grow.sh`: `firewall` before the apply
 (the new addresses must reach etcd on the existing members), `patroni-hosts` after the join (Patroni's `etcd3.hosts` lists all five so it can still find the cluster if three of the old addresses are down). The monitor
@@ -102,7 +103,7 @@ Notes: the app's `DB_COMMAND_TIMEOUT` is 30 s, so requests that commit during th
 ## The limits you accepted
 
 - **Replication is synchronous but not strict** (see "Synchronous replication"): no acknowledged write is lost when the primary dies; the price is a write pause of about 35 s when the standby disappears, and during a standby outage the pair is asynchronous again until it is back.
-- **Three machines lost at once** (of db1, db2, dbw1, dbw2, dbw3) means no majority: no automatic failover, and a surviving database demotes. Any two are survived (drilled). Fix by bringing VMs back, or the emergency procedure below. (Everything runs on one host, `c3`; a host loss takes all five voters at once.)
+- **Two machines lost at once** (of db1, db2, dbw1; since 2026-10-22, with five voters any two were survived and drilled) means no majority: no automatic failover, and a surviving database demotes. Fix by bringing VMs back, or the emergency procedure below. (Everything runs on one host, `c3`; a host loss takes all the voters at once.)
 - **Memory:** `ram_allocation_ratio` on `c3` was raised from 1.1 to 1.2 on 2026-10-20 (see `port-unbind-fix.md`, section on capacity), giving about 9 GB of headroom for rebuilds of `finance-lb` (~4 GB) and test VMs.
   from 1.1 to 1.2 is possible but not done (your decision).
 - The monitor cannot ask etcd directly (firewall); it uses Patroni's `dcs_last_seen` and a TCP check of the witness.

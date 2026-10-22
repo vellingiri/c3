@@ -9,7 +9,7 @@
 # "install" refuses to run when a cluster already exists on a host (a data directory is present): re-forming would lose the leader key.
 set -euo pipefail
 
-HOSTS=(db1 db2 dbw1 dbw2 dbw3)
+HOSTS=(db1 db2 dbw1)
 TOKEN=finance-db-ha
 
 ip_of() { ssh "$1" "hostname -I | awk '{print \$1}'"; }
