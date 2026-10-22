@@ -6,7 +6,7 @@ What is deliberately not done yet, who decides, and what finishes it. Update thi
 ## Waiting for a decision or a moment
 | Item | Why it is open | What finishes it |
 |---|---|---|
-| **Install the nightly `c3` capture** | the disaster-recovery bundle (`c3-rebuild.md`) is only as fresh as the last capture; installing the timer adds a service on `c3`, so it waits for your OK | `scripts/install-c3-dr-capture.sh`, then check `ssh s3 ls -l /backup/c3-dr/bundles/latest` |
+| **Install the nightly `c3` capture** | the disaster-recovery bundle (`c3-rebuild.md`) is only as fresh as the last capture; installing the timer adds a service on `c3`, so it waits for your OK (2026-10-22: decided NOT to touch the real c3 for now) | `scripts/install-c3-dr-capture.sh`, then check `ssh s3 ls -l /backup/c3-dr/bundles/latest` |
 | **Rehearse the `c3` installer** | `scripts/c3-dr/c3-dr-install.sh` has never run on a blank machine (the capture side and the helpers are verified read-only) | run it on a spare machine or a large VM from a bundle copy, fix what the first run finds, record the result in `c3-rebuild.md` |
 
 ## Accepted limits (no action planned)
