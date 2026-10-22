@@ -8,6 +8,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"; ROUTER=${ROUTER:-root@192.168.2.1}; S3=${
 ssh "$S3" '[ -f /root/.ssh/openwrt_backup ] || ssh-keygen -q -t ed25519 -N "" -C "s3-openwrt-backup" -f /root/.ssh/openwrt_backup; chmod 600 /root/.ssh/openwrt_backup'
 PUB=$(ssh "$S3" 'cat /root/.ssh/openwrt_backup.pub')
 ssh "$ROUTER" "grep -qF '$PUB' /etc/dropbear/authorized_keys || echo '$PUB' >> /etc/dropbear/authorized_keys; chmod 600 /etc/dropbear/authorized_keys; wc -l < /etc/dropbear/authorized_keys"
+# so that a plain `ssh root@192.168.2.1` (or `ssh openwrt-router`) from s3 uses that key too
+ssh "$S3" 'grep -q "^Host openwrt-router" /root/.ssh/config 2>/dev/null || { printf "\nHost openwrt-router 192.168.2.1\n  HostName 192.168.2.1\n  User root\n  IdentityFile /root/.ssh/openwrt_backup\n  IdentitiesOnly yes\n" >> /root/.ssh/config; chmod 600 /root/.ssh/config; }'
 scp -q "$HERE/s3-openwrt-backup.sh" "$S3:/usr/local/sbin/openwrt-backup"
 ssh "$S3" 'chmod 0755 /usr/local/sbin/openwrt-backup
 cat > /etc/systemd/system/openwrt-backup.service <<U
