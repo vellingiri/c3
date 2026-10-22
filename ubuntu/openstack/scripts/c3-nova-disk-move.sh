@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Move Nova's VM disks (/var/lib/nova/instances, 65 GB on the 140 GB root partition) to their own partition made from the free space on the NVMe disk.
+# Move Nova's state directory /var/lib/nova (VM disks in instances/, 65 GB, plus compute_id, CA, keys) from the 140 GB root partition to its OWN partition.
+# YOU create the partition and filesystem first (commands in docs/c3-disk-expansion.md) and mount it at /mnt/nova-new; this script only copies and switches.
 # RUN ON c3 AS ROOT. Why and the design: docs/c3-disk-expansion.md. Nothing here runs by itself; each phase is started by hand.
 #
 #   c3-nova-disk-move.sh status      read-only: disk layout, free space, instances size, what each phase would do
-#   c3-nova-disk-move.sh prepare     NO DOWNTIME: new partition (p4) in the free space, ext4 labelled nova-instances, mounted at /mnt/nova-new,
-#                                    first copy of the instances directory while the VMs run (a live copy, only a head start)
+#   c3-nova-disk-move.sh prepare     NO DOWNTIME: checks that your new filesystem is mounted at /mnt/nova-new and empty, first copy of /var/lib/nova
+#                                    while the VMs run (a live copy, only a head start)
 #   c3-nova-disk-move.sh cutover     DOWNTIME (about 5 to 10 min): stops every VM (the Octavia health manager is stopped too, so the amphorae are not
-#                                    failed over), stops nova-compute and libvirtd, final copy, mounts the new partition at /var/lib/nova/instances (fstab by UUID),
-#                                    starts everything again in the right order, waits for ACTIVE. The old directory is kept as /var/lib/nova/instances.old
-#   c3-nova-disk-move.sh finish      later (after a few quiet days): deletes /var/lib/nova/instances.old
-# Rollback until `finish`: umount /var/lib/nova/instances; remove its fstab line; mv /var/lib/nova/instances.old /var/lib/nova/instances; start libvirtd, nova-compute, the VMs.
+#                                    failed over), stops nova-compute and libvirtd, final copy, mounts the new partition at /var/lib/nova (fstab by UUID),
+#                                    starts everything again in the right order, waits for ACTIVE. The old directory is kept as /var/lib/nova.old
+#   c3-nova-disk-move.sh finish      later (after a few quiet days): deletes /var/lib/nova.old
+# Rollback until `finish`: umount /var/lib/nova; remove its fstab line; rmdir /var/lib/nova; mv /var/lib/nova.old /var/lib/nova; start libvirtd, nova-compute, the VMs.
 # Admin credentials: sourced from /root/.bashrc like the other c3 helpers. Needs: parted, rsync, openstack CLI.
 set -euo pipefail
-DISK=/dev/nvme0n1; PART=${DISK}p4; LABEL=nova-instances
-SRC=/var/lib/nova/instances; NEW=/mnt/nova-new; STATE=/root/nova-disk-move
+SRC=/var/lib/nova; NEW=/mnt/nova-new; STATE=/root/nova-disk-move
 mkdir -p "$STATE"
 # shellcheck disable=SC1091
 source /root/.bashrc >/dev/null 2>&1 || true
@@ -23,26 +23,20 @@ die() { echo "STOP: $*" >&2; exit 1; }
 OS() { openstack "$@" 2>/dev/null; }
 
 status() {
-  lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT "$DISK"
-  parted -s "$DISK" unit GB print free | tail -8
-  df -h / "$SRC" | tail -2; du -sh "$SRC" 2>/dev/null
-  mount | grep -E "$NEW|$SRC" || echo "(neither $NEW nor a separate $SRC is mounted)"
-  grep -n nova-instances /etc/fstab || echo "(no fstab line yet)"
+  lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT
+  df -h / "$SRC" "$NEW" 2>/dev/null | sort -u
+  du -sh "$SRC" 2>/dev/null
+  mount | grep -E " $NEW | $SRC " || echo "(neither $NEW nor a separate $SRC is mounted)"
+  grep -n -E " /var/lib/nova " /etc/fstab || echo "(no fstab line for /var/lib/nova yet)"
   echo "ACTIVE VMs: $(OS server list --all-projects --status ACTIVE -f value -c Name | wc -l)"
 }
 
 prepare() {
-  [ ! -e "$PART" ] || die "$PART already exists; look at 'status'"
-  FREE=$(parted -s "$DISK" unit MiB print free | awk '/Free Space/ {s=$1; e=$2; sz=$3} END {print s, e, sz}')
-  echo "last free area (start end size): $FREE"
-  START=$(echo "$FREE" | awk '{gsub("MiB","",$1); print $1}'); SIZE=$(echo "$FREE" | awk '{gsub("MiB","",$3); print int($3)}')
-  [ "$SIZE" -gt 102400 ] || die "less than 100 GB free at the end of $DISK ($SIZE MiB)"
-  say "create $PART from ${START}MiB to the end of the disk ($((SIZE/1024)) GB)"
-  parted -s -a optimal "$DISK" mkpart "$LABEL" ext4 "${START}MiB" 100%
-  partprobe "$DISK"; sleep 2; [ -b "$PART" ] || die "$PART did not appear"
-  mkfs.ext4 -q -L "$LABEL" -m 1 "$PART"
-  mkdir -p "$NEW"; mount "$PART" "$NEW"
-  say "first copy (VMs keep running; this copy is inconsistent by itself and only saves time later)"
+  mountpoint -q "$NEW" || die "mount your new filesystem at $NEW first (docs/c3-disk-expansion.md)"
+  [ "$(findmnt -no SOURCE "$NEW")" != "$(findmnt -no SOURCE /)" ] || die "$NEW is on the root filesystem"
+  [ -z "$(ls -A "$NEW" | grep -v '^lost+found$')" ] || die "$NEW is not empty"
+  AVAIL=$(df -BG --output=avail "$NEW" | tail -1 | tr -dc 0-9); [ "$AVAIL" -gt 150 ] || die "only ${AVAIL} GB on $NEW; expected hundreds"
+  say "first copy of $SRC (VMs keep running; inconsistent by itself, only a head start)"
   rsync -aHAXS --info=progress2 "$SRC"/ "$NEW"/
   df -h "$NEW" | tail -1
   echo "prepare done. Next: pick a window and run 'cutover'."
@@ -62,17 +56,18 @@ cutover() {
   for _ in $(seq 1 60); do [ "$(virsh list --name | grep -c .)" = 0 ] && break; sleep 3; done
   [ "$(virsh list --name | grep -c .)" = 0 ] || die "VMs still running in libvirt: $(virsh list --name | tr '\n' ' ')"
   say "stop nova-compute and libvirt"
-  systemctl stop nova-compute libvirt-guests libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket
+  NOVA_SVCS="nova-api nova-api-metadata nova-conductor nova-scheduler nova-novncproxy nova-serialproxy"
+  systemctl stop $NOVA_SVCS nova-compute libvirt-guests libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket   # nothing may hold files in /var/lib/nova while it is swapped
   say "final copy"
   rsync -aHAXS --delete --info=stats1 "$SRC"/ "$NEW"/ | tail -4
   say "switch"
+  DEV=$(findmnt -no SOURCE "$NEW"); FST=$(findmnt -no FSTYPE "$NEW"); UUID=$(blkid -s UUID -o value "$DEV")
   umount "$NEW"; mv "$SRC" "$SRC.old"; mkdir "$SRC"
-  UUID=$(blkid -s UUID -o value "$PART")
-  grep -q "$UUID" /etc/fstab || echo "UUID=$UUID $SRC ext4 defaults 0 2   # nova-instances ($(date +%F))" >> /etc/fstab
-  systemctl daemon-reload; mount "$SRC"; mountpoint -q "$SRC" || die "mount failed; rollback: mv $SRC.old $SRC"
+  grep -q "$UUID" /etc/fstab || echo "UUID=$UUID $SRC $FST defaults 0 2   # nova state, moved off / ($(date +%F))" >> /etc/fstab
+  systemctl daemon-reload; mount "$SRC"; mountpoint -q "$SRC" || die "mount failed; rollback: rmdir $SRC; mv $SRC.old $SRC"
   chown nova:nova "$SRC"; chmod 755 "$SRC"; df -h "$SRC" | tail -1
-  say "start libvirt and nova-compute"
-  systemctl start libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket libvirtd libvirt-guests nova-compute
+  say "start libvirt, nova-compute and the other nova services"
+  systemctl start libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket libvirtd libvirt-guests nova-compute $NOVA_SVCS
   for _ in $(seq 1 30); do OS compute service list --service nova-compute -f value -c State | grep -q up && break; sleep 4; done
   systemctl start octavia-health-manager 2>/dev/null || true
   say "start the VMs"
