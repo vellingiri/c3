@@ -23,6 +23,7 @@
 # app-level backups, docs/c3-rebuild.md "What is lost"), the OVN databases (rebuilt from Neutron by Terraform), podman images, logs, caches.
 # The bundle contains secrets (service passwords, Fernet keys, the Octavia CA key, ssh keys): staging dir and the s3 copy are root-only.
 set -euo pipefail
+AMP_DIRS="$(ls /root/amphora-fix/*.qcow2 /nfsshare/qcow2/*.qcow2 2>/dev/null | tr '\n' ' ')"   # amphora images kept outside the OpenStack image store
 
 STAGE=${STAGE:-/root/dr-staging}
 S3=${S3:-root@192.168.2.4}
@@ -76,7 +77,7 @@ if [ "$DRY" = 1 ]; then
   done
   say "rabbitmq definitions: $(rabbitmqctl list_users 2>/dev/null | wc -l) lines of users"
   say "glance images   : $(du -sh /var/lib/glance/images 2>/dev/null | cut -f1) in $(ls /var/lib/glance/images 2>/dev/null | wc -l) files (mirrored to $S3:$S3_DIR/images/, only new ones copied)"
-  say "extra qcow2     : $(du -ch /root/amphora-fix/*.qcow2 2>/dev/null | tail -1 | cut -f1) under /root/amphora-fix (mirrored too)"
+  say "extra qcow2     : $(du -ch $AMP_DIRS 2>/dev/null | tail -1 | cut -f1) ($AMP_DIRS, mirrored too)"
   say "/share          : $(du -sh /share 2>/dev/null | cut -f1) (mirrored to $S3:$S3_DIR/share/)"
   say "not captured    : /var/lib/nova/instances $(du -sh /var/lib/nova/instances 2>/dev/null | cut -f1) (VM disks), logs, caches, podman images"
   say "reference dumps : $(command -v openstack >/dev/null && echo "openstack CLI available" || echo "openstack CLI MISSING")"
@@ -189,7 +190,7 @@ if [ "$PUSH" = 1 ]; then
   ssh "$S3" "ln -sfn $S3_DIR/bundles/c3-dr-$TS $S3_DIR/bundles/latest; ls -1d $S3_DIR/bundles/c3-dr-2* | head -n -$KEEP_REMOTE | xargs -r rm -rf"
   # large files: only what is not on s3 yet
   rsync -a --ignore-existing /var/lib/glance/images/ "$S3:$S3_DIR/images/glance/"
-  mkdir -p /root/amphora-fix; rsync -a --ignore-existing --include='*.qcow2' --exclude='*' /root/amphora-fix/ "$S3:$S3_DIR/images/amphora-fix/"
+  for d in /root/amphora-fix /nfsshare/qcow2; do [ -d "$d" ] && rsync -a --ignore-existing --include='*.qcow2' --exclude='*' "$d/" "$S3:$S3_DIR/images/amphora-fix/"; done   # the live amphora image moved from /root/amphora-fix to /nfsshare/qcow2 (the repo host) on 2026-10-22
   rsync -a --delete /share/ "$S3:$S3_DIR/share/"
   say "pushed; latest -> c3-dr-$TS"
 fi

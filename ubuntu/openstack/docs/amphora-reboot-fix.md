@@ -52,7 +52,7 @@ Expected after any host reboot: the watcher may log "trying ... answers again" o
 ## Rebuilding or upgrading the amphora image
 The patch lives **inside the image**, so it is lost if the image is rebuilt or replaced by a newer Octavia amphora image. Before doing that, check whether the new Octavia release already fixes `amphora-netns` (look at the template `.../octavia/amphorae/backends/agent/api_server/templates/amphora-netns.systemd.j2` for `getline` and for a udev wait). If not, repeat the patch on the new image:
 ```bash
-cd /root/amphora-fix && export LIBGUESTFS_BACKEND=direct
+cd /root/amphora-fix && export LIBGUESTFS_BACKEND=direct   # work dir; the live image file amphora-fixed2.qcow2 is kept at /nfsshare/qcow2/ (the repo host) since 2026-10-22
 cp /var/lib/glance/images/<new image id> new.qcow2 && mkdir -p mnt && guestmount --format=qcow2 -a new.qcow2 -i mnt
 T=mnt/opt/amphora-agent-venv/lib/python3.*/site-packages/octavia/amphorae/backends/agent/api_server/templates/amphora-netns.systemd.j2
 # 1. before the line "# Re-add the namespace" insert:   ExecStart=-/usr/bin/udevadm settle --timeout=30
