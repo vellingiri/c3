@@ -43,7 +43,7 @@ Never `apply` in `../archive/*` (retired). `terraform plan` clean on all three s
 k() { kubectl --kubeconfig ~/.kube/prod -n finance "$@"; }            # use a function: K="kubectl ..." breaks in zsh
 kubectl --kubeconfig ~/.kube/prod get nodes                           # prod: c1 w1 w2 w3
 kubectl --kubeconfig ~/.kube/cka get nodes                            # cka: c1 w1 w2 w3 (practice cluster, docs/cka-cluster.md)
-kubectl --kubeconfig ~/.kube/qa get nodes                             # qa: c1 w1 w2 w3 (spare)
+# qa cluster: destroyed 2026-10-22 (recreate with terraform apply in environments/qa); ~/.kube/qa is stale until then
 ```
 
 ## Is everything healthy? (about 2 minutes)

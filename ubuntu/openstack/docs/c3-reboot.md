@@ -82,7 +82,7 @@ With automatic start configured (above) the manual shutdown and start steps can 
 5. **Stop Octavia's health manager so it cannot "repair" amphorae that it will think died:** `ssh c3 'systemctl disable --now octavia-health-manager'`.
 6. Stop the VMs through Nova, waiting for `SHUTOFF` after each group (`openstack server stop <ids>`; Nova gives each guest an ACPI shutdown, then forces it after about 60 s):
    1. the runner and the three prod workers;
-   2. the prod controller `c1`, the whole QA cluster (`c1`, `w1` to `w3`);
+   2. the prod controllers `c1` `c2` `c3` and the `cka` cluster (the `qa` cluster was destroyed 2026-10-22);
    3. the witness `dbw1`, the replica `db2`, then the primary `db1` (so Postgres stops cleanly; since 2026-10-20 the lab has **18 VMs** with `dbw1`, and the database pair runs under Patroni: see `db-ha-patroni.md`; with the whole lab down there is no failover to worry about, but start order matters, below);
    4. the three load balancer amphorae (they are visible only with `--all-projects`).
 7. Check `openstack server list --all-projects` shows only `SHUTOFF` and `pgrep -c qemu-system` is `0`.
@@ -95,7 +95,7 @@ With automatic start configured (above) the manual shutdown and start steps can 
 ### Start (also in order)
 10. `db1` and `dbw1` (two etcd voters = quorum), the prod controller `c1` and the three amphorae first (they take about 30 s; `db1` answers ssh and Postgres immediately).
 11. Then `db2`, the three prod workers (five when this was written) and the runner. The prod nodes were `Ready` within about 2 minutes; the pods show `Unknown` for a short while, then 12 of 12 are `Running`. Replication resumed by itself (`streaming, behind: 0 bytes`). With Patroni, check `ssh db1 patronictl list` (one Leader, one Replica); the earlier tests in this page were before Patroni and the witness (17 VMs).
-12. Then the QA cluster (nothing depends on it). (The spare `learn` VM used for some tests above was removed 2026-10-20.)
+12. Then the `cka` cluster (nothing depends on it; `qa` no longer exists). (The spare `learn` VM used for some tests above was removed 2026-10-20.)
 13. **Re-enable the health manager, only once the amphorae are up: `systemctl enable --now octavia-health-manager`. Do not forget the `enable`: step 5 disabled it, and without it nothing repairs a failed load balancer.** Read the next section before doing this.
 
 ### Verify (the sweep used)

@@ -14,7 +14,7 @@ load balancers, Kubernetes objects and the monitor are not (see "What Terraform 
 |---|---|
 | **prod / qa** (this repo) | The two Terraform environments: `environments/prod` and `environments/qa`. Each has its own Kubernetes cluster and DNS zone. |
 | **"QA"** (finance repo) | The finance repo calls its Kubernetes deployment "QA" (branch `develop`, Argo application `finance-qa`, CI job "Restart QA Pods"). **That deployment runs in the infra "prod" cluster.** The real production of the finance app is a separate Docker Compose host (`yourassets.in`), not in this repo. |
-| **infra "qa" cluster** | Currently runs nothing of the finance app (only ingress-nginx). It is a spare cluster and was the parking place while prod was rebuilt on 2026-10-19. |
+| **infra "qa" cluster** (destroyed 2026-10-22, see below) | Currently runs nothing of the finance app (only ingress-nginx). It is a spare cluster and was the parking place while prod was rebuilt on 2026-10-19. |
 | **primary / replica** | one DB host is writable, the other follows it. **Patroni swaps the roles by itself on failure**; the host names do not move. The app lists both hosts in `DATABASE_URL` and finds the writable one (`db-ha-patroni.md`). |
 | **`db.rdulinux.com`** | A DNS alias for whichever database is primary right now. |
 
@@ -41,7 +41,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 | Cluster | Zone | Nodes (floating / private IP) |
 |---|---|---|
 | **prod** | `prod.rdulinux.com` | `c1` .103 / 10.0.1.254, `c2` .72 / .25, `c3` .78 / .251 (three control-plane nodes behind the API load balancer `prod-api`, `api.prod.rdulinux.com`, `docs/k8s-ha-control-plane.md`), `w1` .52 / .67, `w2` .193 / .197, `w3` .139 / .45 (`w4` and `w5` were retired 2026-10-20; the cluster is now c1 + 3 workers) |
-| **qa** | `qa.rdulinux.com` | `c1` .120 / 10.0.1.66, `w1` .59 / .118, `w2` .98 / .10, `w3` .136 / .96 (the spare `learn` VM was removed 2026-10-20) |
+| **qa** | `qa.rdulinux.com` | **destroyed 2026-10-22** to give memory back to `c3` (it ran only `ingress-nginx`; it had `c1` .120, `w1`, `w2`). Recreate: `terraform apply` in `environments/qa` (about 10 minutes, all from cloud-init); the zone `qa.rdulinux.com.` stays in `infra` |
 Kubernetes 1.30, Calico, pod CIDR `192.168.0.0/16`. Names have no environment prefix: `ssh c1.prod`, `ssh w2.qa`. Server names repeat across environments by design.
 (Floating IPs here are the last octet of `192.168.2.x`.)
 
