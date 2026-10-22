@@ -11,6 +11,7 @@
 set -euo pipefail
 ENV_NAME=${1:?env (prod|qa|cka)}; NODE=${2:?node name}
 KCFG=${KCFG:-$HOME/.kube/$ENV_NAME}
+node_host() { if [ -n "$(dig +short "$1-$ENV_NAME.rdulinux.com" @192.168.2.2 2>/dev/null)" ]; then echo "$1-$ENV_NAME"; else echo "$1.$ENV_NAME"; fi; }
 K() { kubectl --kubeconfig "$KCFG" --context "$ENV_NAME" "$@"; }
 say() { printf '\n== %s\n' "$*"; }
 
@@ -33,10 +34,10 @@ timeout 600 kubectl --kubeconfig "$KCFG" --context "$ENV_NAME" drain "$NODE" --i
 if [ "$IS_CP" != 0 ]; then
   say "2. remove $NODE from etcd (through $OTHER)"
   ETCDCTL='crictl exec $(crictl ps --name "^etcd$" -q | head -1) etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key'
-  ssh "$OTHER.$ENV_NAME" "$ETCDCTL endpoint health --cluster" | cut -c1-90
-  id=$(ssh "$OTHER.$ENV_NAME" "$ETCDCTL member list" | awk -F', ' -v n="$NODE" '$3==n {print $1}')
-  if [ -z "$id" ]; then echo "no etcd member named $NODE (already removed?)"; else ssh "$OTHER.$ENV_NAME" "$ETCDCTL member remove $id"; fi
-  ssh "$OTHER.$ENV_NAME" "$ETCDCTL member list -w table" | tail -6
+  ssh "$(node_host "$OTHER")" "$ETCDCTL endpoint health --cluster" | cut -c1-90
+  id=$(ssh "$(node_host "$OTHER")" "$ETCDCTL member list" | awk -F', ' -v n="$NODE" '$3==n {print $1}')
+  if [ -z "$id" ]; then echo "no etcd member named $NODE (already removed?)"; else ssh "$(node_host "$OTHER")" "$ETCDCTL member remove $id"; fi
+  ssh "$(node_host "$OTHER")" "$ETCDCTL member list -w table" | tail -6
 fi
 
 say "3. delete the node object"

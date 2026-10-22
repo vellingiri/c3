@@ -22,6 +22,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | understand or undo the route that lets `c3` reach private VM addresses | [c3-host-route.md](c3-host-route.md) |
 | understand or operate the three-node Kubernetes control plane and its API load balancer | [k8s-ha-control-plane.md](k8s-ha-control-plane.md) |
 | the `s3` host: RustFS, where Terraform keeps every state, its backups and how to restore | [s3-state-store.md](s3-state-store.md) |
+| naming of VMs (`<role><n>-<env>`), renaming one in place | [cka-cluster.md](cka-cluster.md) ("Names") |
 | rebuild `c3` and everything on it from nothing (disaster recovery) | [c3-rebuild.md](c3-rebuild.md) |
 | see what is still open, waiting for a decision, or an accepted limit | [pending.md](pending.md) |
 | a VM replace failed with "Port ... is still in use" (Neutron policy fix on `c3`) | [port-unbind-fix.md](port-unbind-fix.md) |

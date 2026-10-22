@@ -15,7 +15,9 @@ ENV_NAME=${1:?env (cka|qa|prod)}
 KCFG=${2:-$HOME/.kube/$ENV_NAME}
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 NAME="api.$ENV_NAME.rdulinux.com"
-C1="c1.$ENV_NAME"
+# ssh target of a node: environments renamed to <role><n>-<env> (cka since 2026-10-22) are reached as c1-cka, older ones as c1.prod
+node_host() { if [ -n "$(dig +short "$1-$ENV_NAME.rdulinux.com" @192.168.2.2 2>/dev/null)" ]; then echo "$1-$ENV_NAME"; else echo "$1.$ENV_NAME"; fi; }
+C1=$(node_host c1)
 K() { kubectl --kubeconfig "$KCFG" --context "$ENV_NAME" "$@"; }
 say() { printf '\n== %s\n' "$*"; }
 
@@ -79,7 +81,7 @@ for n in $NODES; do
   if [ "$n" = c1 ]; then
     ssh "$C1" "sed -i 's#server: https://[^ ]*#server: https://$NAME:6443#' /etc/kubernetes/admin.conf /etc/kubernetes/kubelet.conf && cp /etc/kubernetes/admin.conf /root/.kube/config && cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config && systemctl restart kubelet"
   else
-    ssh "$n.$ENV_NAME" "sed -i 's#server: https://[^ ]*#server: https://$NAME:6443#' /etc/kubernetes/kubelet.conf && systemctl restart kubelet"
+    ssh "$(node_host "$n")" "sed -i 's#server: https://[^ ]*#server: https://$NAME:6443#' /etc/kubernetes/kubelet.conf && systemctl restart kubelet"
   fi
   echo "$n: kubelet.conf -> $NAME"
 done

@@ -1,8 +1,8 @@
 # CKA practice cluster: 1 control-plane node and 3 workers, built with the same kubeadm cloud-init as prod and qa.
-# DNS: c1.cka.rdulinux.com, w1.cka.rdulinux.com, ... (zone added in infra/infra.yaml). Throw it away and rebuild it as often as you like:
+# Names: <role><n>-<env> (c1-cka, w1-cka), DNS c1-cka.rdulinux.com. The VMs were renamed in place on 2026-10-22 (moved.tf); the Kubernetes node names stay c1, w1.. (kubelet --hostname-override). Throw it away and rebuild it as often as you like:
 #   terraform destroy   (or remove the nodes) and apply again. docs/cka-cluster.md has the whole procedure.
 
-environment: cka   # tag/metadata on every resource; never part of a VM name
+environment: cka   # tag/metadata on every resource. Since 2026-10-22 the environment is also part of the VM NAME (<role><n>-<env>)
 
 defaults:
   image: ubuntu2404
@@ -10,7 +10,7 @@ defaults:
   security_group_ids:
     - f00e0d86-c4f7-492d-893d-dab70cf732be  # default
     - 80068ced-6e70-4977-aa86-3ae9b40d3c4e  # k8s
-  domain: cka.rdulinux.com
+  domain: rdulinux.com    # names carry the environment (c1-cka), so the DNS name is c1-cka.rdulinux.com, not c1.cka.rdulinux.com
   vars:
     dns_server: 192.168.2.2
     nfs_server: repo.rdulinux.com
@@ -23,10 +23,10 @@ defaults:
 
 nodes:
   # m1.small (2 vCPU, 4 GB) is enough for kubeadm and keeps room on c3 (see docs/cka-cluster.md for the capacity numbers)
-  c1: { role: controller, flavor: m1.small }
-  w1: { role: worker, flavor: m1.small }
-  w2: { role: worker, flavor: m1.small }
-  w3: { role: worker, flavor: m1.small }
+  c1-cka: { role: controller, flavor: m1.small }
+  w1-cka: { role: worker, flavor: m1.small }
+  w2-cka: { role: worker, flavor: m1.small }
+  w3-cka: { role: worker, flavor: m1.small }
   # control-plane nodes 2 and 3 (2026-10-20): join through api.cka.rdulinux.com by themselves; c3 waits 5 minutes so etcd takes one member at a time
-  #c2: { role: controller_join, flavor: m1.small }
-  #c3: { role: controller_join, flavor: m1.small, vars: { join_delay: "300" } }
+  #c2-cka: { role: controller_join, flavor: m1.small }
+  #c3-cka: { role: controller_join, flavor: m1.small, vars: { join_delay: "300" } }
