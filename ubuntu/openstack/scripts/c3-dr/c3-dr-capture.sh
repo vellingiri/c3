@@ -23,7 +23,7 @@
 # app-level backups, docs/c3-rebuild.md "What is lost"), the OVN databases (rebuilt from Neutron by Terraform), podman images, logs, caches.
 # The bundle contains secrets (service passwords, Fernet keys, the Octavia CA key, ssh keys): staging dir and the s3 copy are root-only.
 set -euo pipefail
-AMP_DIRS="$(ls /root/amphora-fix/*.qcow2 /nfsshare/qcow2/*.qcow2 2>/dev/null | tr '\n' ' ')"   # amphora images kept outside the OpenStack image store
+AMP_DIRS="$(ls /root/amphora-fix/*.qcow2 /nfsshare/qcow2/*.qcow2 2>/dev/null | tr '\n' ' ' || true)"   # amphora images kept outside the OpenStack image store
 
 STAGE=${STAGE:-/root/dr-staging}
 S3=${S3:-root@192.168.2.4}
