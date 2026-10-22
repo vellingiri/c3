@@ -11,12 +11,12 @@
 set -euo pipefail
 ENV_NAME=${1:?env (prod|qa|cka)}; NODE=${2:?node name}
 KCFG=${KCFG:-$HOME/.kube/$ENV_NAME}
-node_host() { if [ -n "$(dig +short "$1-$ENV_NAME.rdulinux.com" @192.168.2.2 2>/dev/null)" ]; then echo "$1-$ENV_NAME"; else echo "$1.$ENV_NAME"; fi; }
+node_host() { case "$1" in *-$ENV_NAME) echo "$1"; return;; esac; if [ -n "$(dig +short "$1-$ENV_NAME.rdulinux.com" @192.168.2.2 2>/dev/null)" ]; then echo "$1-$ENV_NAME"; else echo "$1.$ENV_NAME"; fi; }
 K() { kubectl --kubeconfig "$KCFG" --context "$ENV_NAME" "$@"; }
 say() { printf '\n== %s\n' "$*"; }
 
 K get node "$NODE" >/dev/null
-IS_CP=$(K get node "$NODE" -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/control-plane}' 2>/dev/null | wc -c | tr -d ' ')
+IS_CP=$(K get node "$NODE" -o jsonpath='{.metadata.labels}' | grep -c 'node-role.kubernetes.io/control-plane' || true)   # the label's value is empty, so test for the key
 CPS=$(K get nodes -l node-role.kubernetes.io/control-plane -o jsonpath='{.items[*].metadata.name}')
 echo "$ENV_NAME: node $NODE ($( [ "$IS_CP" != 0 ] && echo control-plane || echo worker )); control-plane nodes: $CPS"
 
@@ -29,7 +29,7 @@ fi
 
 say "1. drain $NODE"
 K cordon "$NODE"
-timeout 600 kubectl --kubeconfig "$KCFG" --context "$ENV_NAME" drain "$NODE" --ignore-daemonsets --delete-emptydir-data --timeout=540s || echo "drain did not finish (pods that cannot move stay; continuing is safe for the cluster, not for those pods)"
+kubectl --kubeconfig "$KCFG" --context "$ENV_NAME" drain "$NODE" --ignore-daemonsets --delete-emptydir-data --timeout=540s || echo "drain did not finish (pods that cannot move stay; continuing is safe for the cluster, not for those pods)"
 
 if [ "$IS_CP" != 0 ]; then
   say "2. remove $NODE from etcd (through $OTHER)"
