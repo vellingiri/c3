@@ -10,7 +10,7 @@ LIST=${VM_LIST:-/root/vm-start-list.txt}; CKA=0; DRY=0
 while [ $# -gt 0 ]; do case "$1" in --list) LIST=$2; shift ;; --with-cka) CKA=1 ;; --dry-run) DRY=1 ;; *) echo "usage: $0 [--list FILE] [--with-cka] [--dry-run]" >&2; exit 2 ;; esac; shift; done
 # shellcheck disable=SC1091
 source /root/.bashrc >/dev/null 2>&1 || true
-OS() { openstack "$@" 2>/dev/null; }
+OS() { openstack "$@" </dev/null 2>/dev/null; }   # </dev/null: when the script is piped through ssh, openstack must not read the script from stdin (made the start script die silently on 2026-10-22)
 rank() { case "$1" in dbw*) echo 1 ;; db[0-9]*) echo 2 ;; c[0-9]*) echo 3 ;; ci*|runner*) echo 5 ;; *) echo 4 ;; esac; }   # amphorae and workers = 4
 
 if [ -s "$LIST" ]; then awk '{print $2}' "$LIST" > /tmp/vm-ids.$$

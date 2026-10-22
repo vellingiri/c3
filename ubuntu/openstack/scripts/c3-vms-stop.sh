@@ -11,7 +11,7 @@ LIST=${VM_LIST:-/root/vm-start-list.txt}; YES=0; DRY=0
 for a in "$@"; do case "$a" in --yes) YES=1 ;; --dry-run) DRY=1 ;; *) echo "usage: $0 [--yes] [--dry-run]" >&2; exit 2 ;; esac; done
 # shellcheck disable=SC1091
 source /root/.bashrc >/dev/null 2>&1 || true
-OS() { openstack "$@" 2>/dev/null; }
+OS() { openstack "$@" </dev/null 2>/dev/null; }   # </dev/null: when the script is piped through ssh, openstack must not read the script from stdin (made the start script die silently on 2026-10-22)
 # stop rank: smaller = earlier
 rank() { case "$1" in ci*|runner*) echo 1 ;; w[0-9]*) echo 2 ;; amphora-*) echo 3 ;; c[0-9]*) echo 4 ;; db[0-9]*) echo 5 ;; dbw*) echo 6 ;; *) echo 3 ;; esac; }
 

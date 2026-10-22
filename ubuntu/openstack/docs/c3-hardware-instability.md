@@ -1,0 +1,22 @@
+# c3: kernel oops and segfaults after the reboot of 2026-10-22 (suspected CPU core)
+
+## What happened
+After a clean `systemctl reboot` (test of the new `/var/lib/nova` mount) c3 logged, within 2 minutes of idle running, **two kernel oopses** (`BUG: unable to handle page fault ... RIP: do_anonymous_page+0x39a`, process `openstack`, tainted after the second) and **two userland segfaults** in `python3.13` (`openstack` CLI), at 14:55:02, 14:55:46, 14:56:14 and 14:56:33. **All on CPU 8** (core 4, hyperthread pair CPU 8/9, P-core, max 6.0 GHz). No machine-check or EDAC messages. The earlier boot (2026-10-20 to 22, two days) and the one before it show **none**.
+Side effect: the `openstack` CLI crashed in the middle of `c3-vms-start.sh`, which is why the first start attempts died silently (a second cause, found the same night: the script read from the ssh stdin; fixed with `</dev/null`).
+
+## Hardware
+MSI MAG Z790 TOMAHAWK MAX WIFI (BIOS A.B0, 2026-03-04), **Intel Core i9-14900K** (24 cores, 32 threads), microcode `0x133` (already past the 0x12B fix for the "Vmin shift" instability of 13th/14th gen CPUs, which cannot repair a core that was damaged before), 80 GB DDR5 from **two different kits**: one 32 GB Corsair `CMK32GX5M1B5200C40` and one 48 GB Crucial `CP48G56C46U5.C16B`, running at 4800 MT/s. Mixed-vendor, mixed-size DDR5 is a known source of instability too.
+
+## What was done (reversible, not persistent)
+`echo 0 > /sys/devices/system/cpu/cpu9/online; echo 0 > /sys/devices/system/cpu/cpu8/online`. Result: **145 consecutive `openstack` calls without a crash**, then the 17 VMs were started with `c3-vms-start.sh`, front doors 200, Patroni `db2` Leader / `db1` Sync Standby, 6 of 6 nodes Ready, 4 load balancers ONLINE (cka-api ERROR: cka is off). No kernel event since. Before the change, 4 events in 90 seconds, so this is strong evidence but not proof (the faults were sporadic).
+**The core comes back at the next reboot.** To keep it off: a systemd unit that offlines CPUs 8 and 9 at boot (not installed; needs approval), or the kernel parameter / BIOS (disable that core).
+
+## What to do (owner)
+1. **Memory test:** boot memtest86+ (USB) for at least two full passes over the 80 GB (hours); a failure there says RAM, not CPU.
+2. **BIOS:** update to the latest MSI BIOS for the Z790 (Intel microcode), load optimised defaults and **Intel Default Settings** (no "Multi-Core Enhancement"/"Enhanced Turbo", PL1/PL2 at Intel limits, no XMP/EXPO on the mixed kits). Keep memory at 4800 or lower.
+3. If it persists on a specific core after both: **the CPU is degraded** (Intel extended the 13th/14th gen warranty to 5 years and replaces affected CPUs): RMA with Intel. Until then run with the core offline.
+4. Treat the **runner VM kernel oops** seen earlier (2026-10-20) as possibly related: a faulting host core shows up in guests too.
+5. Backups matter more while the host is suspect: the DR kit, the hourly Terraform-state snapshots and the Patroni pair are the protection; the nightly capture timer is still not installed.
+
+## Also found: VMs do not come back after a clean reboot
+`resume_guests_state_on_host_boot = true` only restarts VMs Nova still considers running. On a **clean** `systemctl reboot`, libvirt-guests shuts the guests down while nova-compute is still up, Nova notices the power-off and marks them stopped, and after the boot all 17 VMs stayed `SHUTOFF` (they came back by themselves in the 2026-10-20 tests only because those ended in a forced reset). Until that is solved, after a clean reboot run `scripts/c3-vms-start.sh` on c3 (stream it: `ssh c3 'bash -s' < scripts/c3-vms-start.sh`, or copy it). The new `/var/lib/nova` mount itself came up correctly before libvirt and nova (`var-lib-nova.mount`).
