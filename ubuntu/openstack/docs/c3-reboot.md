@@ -51,8 +51,8 @@ Limits to know:
 ## Other fixes made on `c3` the same day
 - **`nmbd` failed on every boot.** `/etc/samba/smb.conf` had `interfaces = 127.0.0.0/8 enp3s0`, but `enp3s0` has no IP address (it is a port inside the bridge `br0`, which carries `192.168.2.2`), so nmbd logged "No local IPv4 non-loopback interfaces available, waiting for interface", never reported ready, and systemd timed it out.
   Fixed with `interfaces = 127.0.0.0/8 br0` (backup `smb.conf.bak-20261020`); `systemctl --failed` is now empty. Proof at boot comes with the next reboot.
-- **`nslookup w1.prod` said NXDOMAIN on `c3`** while `ssh w1.prod` worked. The DNS server was right: BIND's tools (`nslookup`, `host`) treat a name with one dot as complete and skip the search list, while `ssh` (glibc) falls back to it.
-  Fixed with `options ndots:2` in `/etc/resolv.conf` (after the search line `rdulinux.com prod.rdulinux.com qa.rdulinux.com`), so `w1.prod`, `c1.qa`, `w2` and `finance` resolve in every tool.
+- **`nslookup w1-prod` said NXDOMAIN on `c3`** while `ssh w1-prod` worked. The DNS server was right: BIND's tools (`nslookup`, `host`) treat a name with one dot as complete and skip the search list, while `ssh` (glibc) falls back to it.
+  Fixed with `options ndots:2` in `/etc/resolv.conf` (after the search line `rdulinux.com prod.rdulinux.com qa.rdulinux.com`), so `w1-prod`, `c1.qa`, `w2` and `finance` resolve in every tool.
   What it means: a name with fewer than 2 dots is tried with the search suffixes first; names with 2 or more dots (`repo.rdulinux.com`) are tried as typed. Side effect: a one-dot external name such as `github.com` first tries the three suffixes (a few milliseconds, then resolves normally).
   Backup `resolv.conf.bak-20261020`. `/etc/resolv.conf` is a plain file here (no resolvconf, no systemd-resolved), so the edit persists.
 
@@ -64,7 +64,7 @@ Four reboot tests of `c3` were done in one day. The last two were **plain `reboo
 | VMs running | started by hand | 17 of 17 by themselves in about 2 min | 17 of 17 by themselves in about 2 min |
 | Both front doors | down until repaired by hand (about 45 min) | **down and did not recover** | **200 about 3 minutes after `c3` answered, nothing touched** |
 | Octavia | rebuilt amphorae, some failed | mass rebuild prevented by the threshold, but the amphorae had lost their VIP network | **0 failovers, same amphora IDs, all `ALLOCATED`, load balancers `ACTIVE`/`ONLINE`** |
-| `nmbd`, route, short names on `c3` | `nmbd` failing | fixed | `nmbd` active, 0 failed units, route present, `w1.prod` resolves |
+| `nmbd`, route, short names on `c3` | `nmbd` failing | fixed | `nmbd` active, 0 failed units, route present, `w1-prod` resolves |
 The cause of tests 1 and 2 failing was **not** the host or Nova but the amphora image (it loses its VIP network after a clean shutdown), an OVN router that keeps a stale MAC for a rebuilt amphora, and the health manager rebuilding amphorae that were merely not yet awake. All three are fixed: see **`amphora-reboot-fix.md`** for the root cause, the fixes (patched image, `heartbeat_timeout`, the `ovn-vip-binding` watcher), the proof and how to re-create the patch.
 The databases, both clusters, Argo, the runner and the monitor came back by themselves every time (replication resumed at 0 lag).
 
@@ -75,7 +75,7 @@ With automatic start configured (above) the manual shutdown and start steps can 
 1. **No CI running:** `gh run list --repo vellingiri/finance --limit 3` (wait until `completed`; the deploy step runs on the runner).
 2. **Free memory.** You need roughly 4 GB of allocatable memory free for Octavia to rebuild amphorae (see below): `ssh c3 'openstack hypervisor stats show -c memory_mb_used'` against about 88156 allocatable.
 3. **Fresh backups:** a DB dump (`k create job --from=cronjob/db-backup-daily pre-reboot-<hhmm>`, where `k` is the function in `operations-cheatsheet.md`, then delete the job), an etcd snapshot
-   (`ssh c1.prod 'sudo systemctl start etcd-snapshot.service'`), and `scripts/db-replication-status.sh db1 db2` showing `streaming, behind: 0 bytes`.
+   (`ssh c1-prod 'sudo systemctl start etcd-snapshot.service'`), and `scripts/db-replication-status.sh db1 db2` showing `streaming, behind: 0 bytes`.
 4. **Baseline:** save `openstack server list --all-projects --long` (IDs, names, networks; names repeat across prod and qa, so use the IDs) and the load balancer and node states.
 
 ### Shut down (graceful, in dependency order)

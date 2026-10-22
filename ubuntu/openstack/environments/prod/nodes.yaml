@@ -14,7 +14,7 @@ defaults:
   security_group_ids:
     - f00e0d86-c4f7-492d-893d-dab70cf732be  # default
     - 80068ced-6e70-4977-aa86-3ae9b40d3c4e  # k8s
-  domain: prod.rdulinux.com     # prod k8s nodes: c1.prod.rdulinux.com ...
+  domain: rdulinux.com     # names carry the environment since 2026-10-22: c1-prod.rdulinux.com ...
   vars:
     dns_server: 192.168.2.2
     nfs_server: repo.rdulinux.com
@@ -43,13 +43,13 @@ nodes:
   runner: { role: runner, flavor: m1.medium, domain: rdulinux.com }   # was m1.large until 2026-10-22: it uses ~0.5 GB idle; resized in place (docs/c3-reboot.md)
 
   # Kubernetes cluster. VM names never contain the environment; it is a tag/metadata.
-  c1: { role: controller, flavor: m1.medium }
+  c1-prod: { role: controller, flavor: m1.medium }
   # control-plane nodes 2 and 3 (2026-10-20): join through api.prod.rdulinux.com by themselves and are added to the load balancer prod-api by the reconciler on c3;
   # c3 waits 5 minutes so etcd takes one member at a time. m1.small: the host's RAM allocation limit is the constraint (docs/k8s-ha-control-plane.md).
-  c2: { role: controller_join, flavor: m1.small }
-  c3: { role: controller_join, flavor: m1.small, vars: { join_delay: "300" } }
-  w1: { role: worker, flavor: m1.small }   # re-added 2026-10-20 (a fresh VM; the first w1 was retired the same day)
-  w2: { role: worker, flavor: m1.small }
-  w3: { role: worker, flavor: m1.small }
+  c2-prod: { role: controller_join, flavor: m1.small }
+  c3-prod: { role: controller_join, flavor: m1.small, vars: { join_delay: "300" } }
+  w1-prod: { role: worker, flavor: m1.small }   # re-added 2026-10-20 (a fresh VM; the first w1 was retired the same day)
+  w2-prod: { role: worker, flavor: m1.small }
+  w3-prod: { role: worker, flavor: m1.small }
 
   # c2, w4, w5, w6 were decommissioned by removing them from this file.

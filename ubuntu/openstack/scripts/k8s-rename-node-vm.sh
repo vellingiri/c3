@@ -25,9 +25,16 @@ for s in json.load(sys.stdin):
 echo "$ENV_NAME/$OLD ($ID) -> $NEW"
 
 say "1. pin the kubelet to the node name $OLD"
-ssh "$SSH_OLD" "grep -q -- '--hostname-override' /etc/default/kubelet && echo 'already pinned' || { sed -i 's|^KUBELET_EXTRA_ARGS=\(.*\)\$|KUBELET_EXTRA_ARGS=\1 --hostname-override=$OLD|' /etc/default/kubelet; systemctl restart kubelet; }; cat /etc/default/kubelet"
+# older nodes may not have /etc/default/kubelet or a KUBELET_EXTRA_ARGS line in it: create it. Then PROVE the running kubelet carries the override before touching the hostname.
+ssh "$SSH_OLD" "touch /etc/default/kubelet
+if grep -q -- '--hostname-override' /etc/default/kubelet; then echo 'already pinned'
+elif grep -q '^KUBELET_EXTRA_ARGS=' /etc/default/kubelet; then sed -i 's|^KUBELET_EXTRA_ARGS=\(.*\)\$|KUBELET_EXTRA_ARGS=\1 --hostname-override=$OLD|' /etc/default/kubelet; systemctl restart kubelet
+else echo 'KUBELET_EXTRA_ARGS=--hostname-override=$OLD' >> /etc/default/kubelet; systemctl restart kubelet; fi
+cat /etc/default/kubelet"
 for i in $(seq 1 30); do K get node "$OLD" --no-headers | grep -q " Ready" && break; sleep 4; done
 K get node "$OLD" --no-headers | awk '{print "node:",$1,$2}'
+ssh "$SSH_OLD" "pgrep -a kubelet | grep -q -- '--hostname-override=$OLD'" || { echo "the running kubelet does not carry --hostname-override=$OLD: NOT renaming (the node would re-register under a new name)" >&2; exit 1; }
+K get node "$OLD" --no-headers | grep -q " Ready" || { echo "node $OLD is not Ready after pinning: stopping" >&2; exit 1; }
 
 say "2. hostname and /etc/hosts"
 ssh "$SSH_OLD" "hostnamectl set-hostname '$NEW'; sed -i 's/\b$OLD\b/$NEW/g' /etc/hosts; hostname; grep -m2 '$NEW' /etc/hosts"

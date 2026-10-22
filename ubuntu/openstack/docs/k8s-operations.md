@@ -37,7 +37,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://finance.rdulinux.com/health
 1. `environments/prod/nodes.yaml`: add `w6: { role: worker, flavor: m1.small }`. Check room first (`ARCHITECTURE.md`, Capacity; a failed build says `NoValidHost`).
    `terraform plan`, then `apply`. The VM gets its name, floating IP and DNS record.
 2. It joins by itself using `/nfsshare/join-prod.sh` (retries 5 times). The token lasts **24 hours**; if it is older, recreate it on `c1` first:
-   `ssh c1.prod 'sudo kubeadm token create --print-join-command | sudo tee /nfsshare/join-prod.sh'`.
+   `ssh c1-prod 'sudo kubeadm token create --print-join-command | sudo tee /nfsshare/join-prod.sh'`.
 3. `kubectl get nodes` until it is `Ready` (to test its NodePort run `curl http://<its private or floating IP>:30080/health` **from `c3`**, not from your Mac; see `operations-cheatsheet.md`, Reachability) (cloud-init shows `error - running` until the install ends: the harmless `update-locale` message).
 4. **Add it to both load balancers** (they do not follow Kubernetes nodes): see `octavia-finance-lb.md`, "Workers change over time".
    `finance-pool` on `finance-lb` (port 30080) and `argo-backend` on `argo-lb` (port 30443). Confirm members go `ONLINE`.
@@ -82,7 +82,7 @@ Worked example (2026-10-20, `w1` retired): pools edited, drain with 81 probe che
 ## Kubeconfigs
 `~/.kube/prod` and `~/.kube/cka` (practice cluster) are separate files (`~/.kube/qa` is stale: the `qa` cluster was destroyed 2026-10-22), all listed in `KUBECONFIG` in `~/.bash_profile` (backups from before the rebuild: `prod.bak-old-cluster`, `qa.bak-old-c2`). Always pass `--kubeconfig` (or `--context`):
 a tool like `ktx` leaves `current-context` pointing at the other cluster in both files. After a cluster rebuild the CA changes: fetch `~/.kube/config` from `c1`
-(`ssh c1.prod cat ~/.kube/config`) and rename the entries. The GitHub runner has its own kubeconfig at `/home/runner/.kube/config`; after a rebuild it must be replaced too
+(`ssh c1-prod cat ~/.kube/config`) and rename the entries. The GitHub runner has its own kubeconfig at `/home/runner/.kube/config`; after a rebuild it must be replaced too
 (CI then fails with `x509: certificate signed by unknown authority` until it is).
 
 ## Things that bit us (and the fix)

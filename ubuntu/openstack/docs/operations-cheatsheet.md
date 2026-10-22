@@ -7,7 +7,7 @@ Commands you need every week, and a "is everything healthy?" sweep. Details live
 | You type | Goes to | Notes |
 |---|---|---|
 | `ssh c1` `ssh w1` ... `ssh w3` | `<name>.prod.rdulinux.com` | prod Kubernetes nodes, user root, key `id_ed25519` |
-| `ssh c1.prod` `ssh w2.qa` | `<name>.<env>.rdulinux.com` | any VM, either environment (`w1` exists in both: `ssh w1.prod`, `ssh w1.qa`) |
+| `ssh c1-prod` `ssh w2.qa` | `<name>.<env>.rdulinux.com` | any VM, either environment (`w1` exists in both: `ssh w1-prod`, `ssh w1.qa`) |
 | `ssh db1` `ssh db2` `ssh dbw1` | the two database VMs and the etcd tie-breaker VM | key `id_ed25519.c3`. On db1/db2: `patronictl list` |
 | `ssh db` | whoever `db.rdulinux.com` points at (the primary) | after a failover your Mac may cache the old answer: `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` |
 | `ssh runner` `ssh repo` `ssh s3` (was `backup`) `ssh c3` | shared services and the cloud host | key `id_ed25519.c3` |
@@ -63,7 +63,7 @@ kubectl --kubeconfig ~/.kube/cka get nodes                            # cka: c1 
 | Backups | `k get cronjob` and `k get jobs --sort-by=.metadata.creationTimestamp \| tail -3` | hourly and daily jobs `Complete` |
 | Terraform state backups | `ssh s3 'ls -l /backup/terraform-state/last-ok'` | less than an hour old (`s3-state-store.md`) |
 | Kubernetes API behind the VIP | `ssh c3 'openstack loadbalancer member list prod-api-pool -c name -c operating_status'` | 3 members `ONLINE` once c2 and c3 exist (`k8s-ha-control-plane.md`) |
-| etcd snapshots | `ssh c1.prod 'ls -lh /var/backups/etcd \| tail -3'` | a recent file |
+| etcd snapshots | `ssh c1-prod 'ls -lh /var/backups/etcd \| tail -3'` | a recent file |
 | CI | `gh run list --repo vellingiri/finance --limit 3` | `completed/success` |
 
 ## Host virtualization check on `c3`: `virt-host-validate`
@@ -75,7 +75,7 @@ Run **`virt-host-validate qemu`** (the only driver used here). A plain `virt-hos
 Everything else must read `PASS` (KVM, `/dev/kvm`, vhost-net, tun, the cgroup controllers, IOMMU).
 
 ## Name lookups on `c3`
-`c3` resolves short names through the search list `rdulinux.com prod.rdulinux.com qa.rdulinux.com` with `options ndots:2`: `w1.prod`, `c1.qa`, `w2` (prod), `finance` and `db1` all work in `nslookup`, `host`, `dig +search` and `ssh`
+`c3` resolves short names through the search list `rdulinux.com prod.rdulinux.com qa.rdulinux.com` with `options ndots:2`: `w1-prod`, `c1.qa`, `w2` (prod), `finance` and `db1` all work in `nslookup`, `host`, `dig +search` and `ssh`
 (details in `c3-reboot.md`, "Other fixes"). Your Mac uses the aliases in `~/.ssh/config` for ssh.
 
 ## Credentials: where they are (never in git, never paste them in chat)

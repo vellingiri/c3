@@ -15,7 +15,7 @@ ENV_NAME=${1:?env (cka|qa|prod)}
 KCFG=${2:-$HOME/.kube/$ENV_NAME}
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 NAME="api.$ENV_NAME.rdulinux.com"
-# ssh target of a node: environments renamed to <role><n>-<env> (cka since 2026-10-22) are reached as c1-cka, older ones as c1.prod
+# ssh target of a node: environments renamed to <role><n>-<env> (cka since 2026-10-22) are reached as c1-cka, c1-prod; an environment with the old names (c1.qa) as c1.<env>
 node_host() { if [ -n "$(dig +short "$1-$ENV_NAME.rdulinux.com" @192.168.2.2 2>/dev/null)" ]; then echo "$1-$ENV_NAME"; else echo "$1.$ENV_NAME"; fi; }
 C1=$(node_host c1)
 K() { kubectl --kubeconfig "$KCFG" --context "$ENV_NAME" "$@"; }

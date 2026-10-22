@@ -42,7 +42,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 |---|---|---|
 | **prod** | `prod.rdulinux.com` | `c1` .103 / 10.0.1.254, `c2` .72 / .25, `c3` .78 / .251 (three control-plane nodes behind the API load balancer `prod-api`, `api.prod.rdulinux.com`, `docs/k8s-ha-control-plane.md`), `w1` .52 / .67, `w2` .193 / .197, `w3` .139 / .45 (`w4` and `w5` were retired 2026-10-20; the cluster is now c1 + 3 workers) |
 | **qa** | `qa.rdulinux.com` | **destroyed 2026-10-22** to give memory back to `c3` (it ran only `ingress-nginx`; it had `c1` .120, `w1`, `w2`). Recreate: `terraform apply` in `environments/qa` (about 10 minutes, all from cloud-init); the zone `qa.rdulinux.com.` stays in `infra` |
-Kubernetes 1.30, Calico, pod CIDR `192.168.0.0/16`. Names have no environment prefix: `ssh c1.prod`, `ssh w2.qa`. Server names repeat across environments by design.
+Kubernetes 1.30, Calico, pod CIDR `192.168.0.0/16`. Names have no environment prefix: `ssh c1-prod`, `ssh w2.qa`. Server names repeat across environments by design.
 (Floating IPs here are the last octet of `192.168.2.x`.)
 
 ## How a request travels
