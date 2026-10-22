@@ -78,6 +78,7 @@ REMOTE
 say "4. wait for $NEW to be Ready"
 for i in $(seq 1 60); do K get node "$NEW" --no-headers 2>/dev/null | grep -q " Ready" && break; sleep 5; done
 K get node "$NEW" --no-headers | grep -q " Ready" || die "$NEW did not become Ready; look at: ssh $TARGET journalctl -u kubelet -n 50"
+[ "$IS_CP" = 1 ] || K label node "$NEW" node-role.kubernetes.io/worker= --overwrite >/dev/null   # ROLES column of kubectl get nodes
 K get nodes --no-headers | awk '{print $1,$2,$3}' | tr '\n' ';'; echo
 
 if [ "$IS_CP" = 1 ]; then

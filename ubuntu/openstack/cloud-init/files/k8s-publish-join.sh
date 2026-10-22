@@ -14,6 +14,10 @@ CLUSTER=$(cat /etc/k8s-cluster-name)
 DIR=${JOIN_DIR:-/nfsshare}
 export KUBECONFIG=/etc/kubernetes/admin.conf
 
+# Give every worker the role label `kubectl get nodes` shows in ROLES (a kubelet may not label itself node-role.kubernetes.io/*; only a control plane can).
+# Idempotent; a node that joined since the last run is labelled within the hour.
+kubectl label nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/worker' node-role.kubernetes.io/worker= >/dev/null 2>&1 || true
+
 join=$(kubeadm token create --ttl 24h --print-join-command)
 key=$(kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -1)
 case "$key" in *[!0-9a-f]*|"") echo "could not get a certificate key (got: '$key')" >&2; exit 1 ;; esac
