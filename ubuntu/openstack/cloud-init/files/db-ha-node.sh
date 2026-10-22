@@ -26,12 +26,16 @@ exec > >(tee -a /var/log/db-ha-node.log) 2>&1
 
 SCOPE=finance-db
 PGV=16
-ME=$(hostname -s)
 export ETCDCTL_API=3
 
+# Who am I? By ADDRESS, not by hostname: the group's member names (db1, db2, dbw1 = the etcd member and Patroni names) are logical names and are not the
+# VM's hostname since the VMs were called db1-prod, db2-prod ... (2026-10-22); the address is what MEMBERS pairs with each name.
 member_ip() { echo "$MEMBERS" | tr ',' '\n' | awk -F= -v n="$1" '$1==n{print $2}'; }
-MYIP=$(member_ip "$ME")
-[ -n "$MYIP" ] || { echo "$ME is not in MEMBERS=$MEMBERS" >&2; exit 1; }
+ME=""; MYIP=""
+for pair in $(echo "$MEMBERS" | tr ',' ' '); do
+  for l in $(hostname -I); do [ "$l" = "${pair#*=}" ] && { ME=${pair%%=*}; MYIP=${pair#*=}; }; done
+done
+[ -n "$ME" ] || { echo "none of this host's addresses ($(hostname -I)) is in MEMBERS=$MEMBERS" >&2; exit 1; }
 OTHERS=$(echo "$MEMBERS" | tr ',' '\n' | awk -F= -v n="$ME" '$1!=n{print $2}')
 ALL_IPS=$(echo "$MEMBERS" | tr ',' '\n' | awk -F= '{print $2}' | paste -sd, -)
 echo "== $(date -Is) $ME ($ROLE) $MYIP, group: $MEMBERS"

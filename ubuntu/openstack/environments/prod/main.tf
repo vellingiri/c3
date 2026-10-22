@@ -17,6 +17,8 @@ locals {
         startswith(g, "@") ? local.sg_by_name[trimprefix(g, "@")] : g
       ]
       private_ip = try(n.ip, null)
+      # logical name of a database-group member (etcd member / Patroni member), independent of the VM's name: db1-prod is the VM, db1 the member
+      member     = try(n.member, name)
       domain     = try(n.domain, local.defaults.domain)
       manage_dns = try(n.manage_dns, true)
       vars       = merge(local.defaults.vars, try(n.vars, {}))
@@ -29,11 +31,11 @@ locals {
 locals {
   db_ha_roles = ["database", "witness"]
   db_ha_members = join(",", [
-    for name, n in local.nodes : "${name}=${n.private_ip}" if contains(local.db_ha_roles, n.role)
+    for name, n in local.nodes : "${n.member}=${n.private_ip}" if contains(local.db_ha_roles, n.role)
   ])
   db_ha_vars = {
     ha_members              = local.db_ha_members
-    ha_witness              = join(",", [for name, n in local.nodes : name if n.role == "witness"])
+    ha_witness              = join(",", [for name, n in local.nodes : n.member if n.role == "witness"])
     ha_postgres_password    = var.db_ha_postgres_password
     ha_replication_password = var.db_ha_replication_password
     ha_rest_password        = var.db_ha_rest_password

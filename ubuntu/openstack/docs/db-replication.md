@@ -61,7 +61,7 @@ Healthy output: `streaming | async | 0` in the walsender line, the slot `active`
 **Automatic alerts (installed 2026-10-20):** a systemd timer on the **runner** VM runs `/usr/local/sbin/db-replication-monitor` every 2 minutes
 and pushes to a private [ntfy.sh](https://ntfy.sh) topic. Subscribe to the topic in the ntfy app or browser; the topic name is the "password" of
 the channel, so it is not in git. It lives in `/etc/default/db-monitor` on the runner (mode 0600, together with the monitor login):
-`ssh runner "sed -n 's#^NTFY_URL=##p' /etc/default/db-monitor"`.
+`ssh ci1 "sed -n 's#^NTFY_URL=##p' /etc/default/db-monitor"`.
 
 | It alerts when | Priority |
 |---|---|
@@ -79,10 +79,10 @@ data), allowed only to the `postgres` database from `10.0.1.0/24` by the rule `h
 
 Useful commands:
 ```bash
-ssh runner 'systemctl list-timers db-monitor.timer --no-pager'        # next / last run
-ssh runner 'journalctl -u db-monitor.service -n 20 --no-pager'        # what it saw
-ssh runner '/usr/local/sbin/db-replication-monitor --dry-run'        # check now, no notification
-ssh runner '/usr/local/sbin/db-replication-monitor --test'           # send a test notification
+ssh ci1 'systemctl list-timers db-monitor.timer --no-pager'        # next / last run
+ssh ci1 'journalctl -u db-monitor.service -n 20 --no-pager'        # what it saw
+ssh ci1 '/usr/local/sbin/db-replication-monitor --dry-run'        # check now, no notification
+ssh ci1 '/usr/local/sbin/db-replication-monitor --test'           # send a test notification
 ```
 (Run these through ssh as above; `--dry-run` exits 1 when there is a problem.) Re-install, rotate the monitor password or move to another runner:
 `scripts/install-db-monitor.sh [runner-host]` (keeps the existing topic; `NTFY_TOPIC=...` sets another). Thresholds are variables in

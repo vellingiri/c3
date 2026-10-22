@@ -197,7 +197,7 @@ notify() {
   # whenever a database changes role. Patroni calls the script on every role change.
   local h
   for h in "${HOSTS[@]}"; do
-    ssh runner "sed -n 's/^NTFY_URL=//p' /etc/default/db-monitor" | ssh "$h" "umask 077; printf 'NTFY_URL=%s\n' \"\$(cat)\" > /etc/default/patroni-notify; chown postgres:postgres /etc/default/patroni-notify"
+    ssh ci1 "sed -n 's/^NTFY_URL=//p' /etc/default/db-monitor" | ssh "$h" "umask 077; printf 'NTFY_URL=%s\n' \"\$(cat)\" > /etc/default/patroni-notify; chown postgres:postgres /etc/default/patroni-notify"
     ssh "$h" "cat > /usr/local/bin/patroni-notify && chmod 755 /usr/local/bin/patroni-notify" <<'NOTIFY'
 #!/bin/sh
 # Patroni callback (scripts/db-ha-patroni.sh notify): $1 = action, $2 = role, $3 = cluster. Tells the ntfy topic when this node changes role.

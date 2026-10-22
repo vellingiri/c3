@@ -10,7 +10,7 @@ Commands you need every week, and a "is everything healthy?" sweep. Details live
 | `ssh c1-prod` `ssh w2.qa` | `<name>.<env>.rdulinux.com` | any VM, either environment (`w1` exists in both: `ssh w1-prod`, `ssh w1.qa`) |
 | `ssh db1` `ssh db2` `ssh dbw1` | the two database VMs and the etcd tie-breaker VM | key `id_ed25519.c3`. On db1/db2: `patronictl list` |
 | `ssh db` | whoever `db.rdulinux.com` points at (the primary) | after a failover your Mac may cache the old answer: `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` |
-| `ssh runner` `ssh repo` `ssh s3` (was `backup`) `ssh c3` | shared services and the cloud host | key `id_ed25519.c3` |
+| `ssh ci1` `ssh repo` `ssh s3` (was `backup`) `ssh c3` | shared services and the cloud host | key `id_ed25519.c3` |
 `/opt/c3/bin/mssh host1 host2 ...` opens synchronized tmux panes (type once, runs on all).
 The old `haproxy` and `qa` aliases are gone: the VM and the name were retired (`../CHANGELOG.md`).
 
@@ -59,7 +59,7 @@ kubectl --kubeconfig ~/.kube/cka get nodes                            # cka: c1 
 | Database path | `k exec deploy/backend -- sh -c 'psql "$DATABASE_URL" -qAt -c "select inet_server_addr(), pg_is_in_recovery()"'` | the current leader's address, `f` (after a failover this is `10.0.1.69`, which is fine) |
 | Patroni | `ssh db1 patronictl list` | one `Leader running`, one `Replica streaming`, lag 0, same TL |
 | Replication | `scripts/db-replication-status.sh db1 db2` | `streaming, behind: 0 bytes`, exit 0 |
-| Monitor | `ssh runner 'systemctl is-active db-monitor.timer; /usr/local/sbin/db-replication-monitor --dry-run'` | `active`; `db1 primary, db2 replica, lag 0 bytes` |
+| Monitor | `ssh ci1 'systemctl is-active db-monitor.timer; /usr/local/sbin/db-replication-monitor --dry-run'` | `active`; `db1 primary, db2 replica, lag 0 bytes` |
 | Backups | `k get cronjob` and `k get jobs --sort-by=.metadata.creationTimestamp \| tail -3` | hourly and daily jobs `Complete` |
 | Terraform state backups | `ssh s3 'ls -l /backup/terraform-state/last-ok'` | less than an hour old (`s3-state-store.md`) |
 | Kubernetes API behind the VIP | `ssh c3 'openstack loadbalancer member list prod-api-pool -c name -c operating_status'` | 3 members `ONLINE` once c2 and c3 exist (`k8s-ha-control-plane.md`) |
