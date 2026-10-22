@@ -29,10 +29,10 @@ nodes:
   # Migrated from v1 (adopted in place with scripts/adopt-node.sh):
   # Shared services stay in the main zone: apps use db.rdulinux.com.
   # db1 was "db". The name db.rdulinux.com is now a service alias for the current primary (see infra/infra.yaml).
-  db1-prod: { role: database, member: db1, ip: 10.0.1.191, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
+  db1-prod: { role: database, member: db1, ip: 10.0.1.191, flavor: m1.small-20g, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
   # db1 and db2 run PostgreSQL under Patroni (docs/db-ha-patroni.md); a rebuilt one sets itself up from cloud-init and joins the running pair.
   # `ip` is required for database and witness nodes (the group is built from these addresses; same value the VM already has).
-  db2-prod: { role: database, member: db2, ip: 10.0.1.69, flavor: m1.small, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
+  db2-prod: { role: database, member: db2, ip: 10.0.1.69, flavor: m1.small-20g, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
   # dbw1 (was db-witness until 2026-10-20): third voter (etcd only) so the database pair can fail over automatically without split brain.
   dbw1-prod: { role: witness, member: dbw1, ip: 10.0.1.120, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
   # dbw2, dbw3: two more witnesses were added on 2026-10-20 (5 etcd voters) and REMOVED on 2026-10-22 to save memory on c3 (3 voters again).
@@ -40,14 +40,14 @@ nodes:
   #dbw2-prod: { role: witness, ip: 10.0.1.121, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
   #dbw3-prod: { role: witness, ip: 10.0.1.122, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
   # runner has default + k8s SGs, which equal the defaults, so no override needed.
-  ci1-prod: { role: runner, flavor: m1.medium, domain: rdulinux.com }   # was m1.large until 2026-10-22: it uses ~0.5 GB idle; resized in place (docs/c3-reboot.md)
+  ci1-prod: { role: runner, flavor: m1.medium-20g, domain: rdulinux.com }   # was m1.large until 2026-10-22: it uses ~0.5 GB idle; resized in place (docs/c3-reboot.md)
 
   # Kubernetes cluster. VM names never contain the environment; it is a tag/metadata.
-  c1-prod: { role: controller, flavor: m1.medium }
+  c1-prod: { role: controller, flavor: m1.medium-20g }
   # control-plane nodes 2 and 3 (2026-10-20): join through api.prod.rdulinux.com by themselves and are added to the load balancer prod-api by the reconciler on c3;
   # c3 waits 5 minutes so etcd takes one member at a time. m1.small: the host's RAM allocation limit is the constraint (docs/k8s-ha-control-plane.md).
-  c2-prod: { role: controller_join, flavor: m1.small }
-  c3-prod: { role: controller_join, flavor: m1.small, vars: { join_delay: "300" } }
+  c2-prod: { role: controller_join, flavor: m1.small-20g }
+  c3-prod: { role: controller_join, flavor: m1.small-20g, vars: { join_delay: "300" } }
   # workers: flavor k8s.worker = 2 vCPU, 4 GB, 20 GB disk (resized in place from m1.small on 2026-10-22: the CI browser image did not fit in 10 GB)
   w1-prod: { role: worker, flavor: k8s.worker }   # re-added 2026-10-20 (a fresh VM; the first w1 was retired the same day)
   w2-prod: { role: worker, flavor: k8s.worker }
