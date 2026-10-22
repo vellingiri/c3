@@ -50,6 +50,7 @@ Update this file in the same commit as any change, and list anything done **by h
 
 ### 2026-10-22 (late night, later): kernel 6.12.113 installed on c3 (not yet running)
 - Owner's decision: `apt-get install --only-upgrade linux-image-amd64` on c3 (Debian security): new package `linux-image-6.12.113+deb13-amd64` and the meta package at 6.12.113-1; nothing else upgraded (300 other packages left alone). GRUB regenerated; the default entry is the new kernel; **6.12.95 (the running one) and 6.12.94 stay installed as fallback** (GRUB menu > Advanced options). It takes effect at the next reboot: stop the VMs first (`scripts/c3-vms-stop.sh`), reboot, check `uname -r` = `6.12.113+deb13-amd64`, the `/var/lib/nova` mount, `cat /sys/devices/system/cpu/offline`, kernel log, then `scripts/c3-vms-start.sh`. Done while the hardware fault (docs/c3-hardware-instability.md) is under observation: if oopses change or stop after this kernel, note it there, since two things changed (BIOS and kernel).
+- Kernel policy (owner): **always keep N and N-1** for rollback. After this install c3 has 6.12.113 (N) and 6.12.95 (N-1, running); the older 6.12.94 was purged at the owner's request. On every future kernel update purge only versions older than N-1.
 - Not in Terraform: the kernel package on c3.
 
 ### 2026-10-22 (late night): BIOS 7E25vAC flashed; c3 running with all 32 threads (watch the kernel log)
