@@ -22,7 +22,7 @@ Built and rehearsed 2026-10-20. PostgreSQL 16.15 (Ubuntu packages) on both VMs.
 | Role today | **primary** (read/write) | **replica** (read only, hot standby) |
 | Private IP | `10.0.1.191` | `10.0.1.69` |
 | Floating IP | `192.168.2.124` | `192.168.2.135` |
-| DNS | `db1.rdulinux.com` | `db2.rdulinux.com` |
+| DNS | `db1-prod.rdulinux.com` (VM name; the Patroni member is still `db1`) | `db2-prod.rdulinux.com` (member `db2`) |
 | Flavor / disk | m1.small, 10 GB | m1.small, 10 GB |
 | Terraform | `environments/prod/nodes.yaml` | same |
 
