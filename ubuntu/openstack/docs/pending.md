@@ -8,7 +8,6 @@ What is deliberately not done yet, who decides, and what finishes it. Update thi
 |---|---|---|
 | **Install the nightly `c3` capture** | the disaster-recovery bundle (`c3-rebuild.md`) is only as fresh as the last capture; installing the timer adds a service on `c3`, so it waits for your OK | `scripts/install-c3-dr-capture.sh`, then check `ssh s3 ls -l /backup/c3-dr/bundles/latest` |
 | **Rehearse the `c3` installer** | `scripts/c3-dr/c3-dr-install.sh` has never run on a blank machine (the capture side and the helpers are verified read-only) | run it on a spare machine or a large VM from a bundle copy, fix what the first run finds, record the result in `c3-rebuild.md` |
-| Kubernetes app layer after a rebuild | Argo CD install, the `finance-qa` Application, secrets not in git, NFS PVs and the runner registration are documented, not scripted (`c3-rebuild.md`, "Applications") | a bootstrap script in the finance repo |
 
 ## Accepted limits (no action planned)
 - The host `c3` is close to its real memory: 67 of 80 GB in use on 2026-10-20 with 118 GB allocated (ratio 1.7). Check `free -m` ("available") before adding VMs; the allocation ratio is not a safety margin (`amphora-reboot-fix.md`).

@@ -15,6 +15,20 @@ write_files:
   - path: /etc/default/kubelet
     content: |
       KUBELET_EXTRA_ARGS=--resolv-conf=/etc/resolv.conf
+  # The pod network 192.168.0.0/16 contains our DNS server 192.168.2.2, so Calico does not masquerade pod traffic to it (the destination counts as "inside the pods' range"): CoreDNS
+  # queries then leave the VM with a pod source address and OpenStack drops them (pods could not resolve github.com or any outside name; found 2026-10-22). Masquerade that one destination.
+  - path: /etc/systemd/system/pod-dns-masq.service
+    content: |
+      [Unit]
+      Description=Masquerade pod traffic to the lab DNS server (pod CIDR overlaps 192.168.2.0/24)
+      After=network-online.target
+      Wants=network-online.target
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/sh -c 'iptables -t nat -C POSTROUTING -s 192.168.0.0/16 -d 192.168.2.2 -j MASQUERADE 2>/dev/null || iptables -t nat -I POSTROUTING 1 -s 192.168.0.0/16 -d 192.168.2.2 -j MASQUERADE'
+      [Install]
+      WantedBy=multi-user.target
   - path: /etc/crictl.yaml
     content: |
       runtime-endpoint: unix:///run/containerd/containerd.sock
@@ -31,6 +45,8 @@ runcmd:
   - echo "/- /etc/auto.mount" >> /etc/auto.master
   - echo "/nfsshare -fstype=nfs,rw ${nfs_server}:/nfsshare" > /etc/auto.mount
   - systemctl restart autofs
+  - systemctl daemon-reload
+  - systemctl enable --now pod-dns-masq.service
   - mkdir -p /etc/containerd /etc/apt/keyrings
   - containerd config default > /etc/containerd/config.toml
   - sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
