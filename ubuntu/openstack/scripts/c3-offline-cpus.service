@@ -1,0 +1,16 @@
+[Unit]
+Description=Keep CPU 8 and 9 (P-core 4) offline: kernel oopses and segfaults on that core, 2026-10-22 (docs/c3-hardware-instability.md)
+DefaultDependencies=no
+After=sysinit.target
+Before=libvirtd.service nova-compute.service libvirt-guests.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# thread 9 first, then 8; harmless if already offline
+ExecStart=/bin/sh -c 'for c in 9 8; do echo 0 > /sys/devices/system/cpu/cpu$c/online; done'
+# no ExecStop on purpose: stopping the unit (also at every shutdown) must not bring the core back. To get the cores back: disable the unit and
+# `echo 1 > /sys/devices/system/cpu/cpu8/online` (and cpu9), or reboot.
+
+[Install]
+WantedBy=multi-user.target

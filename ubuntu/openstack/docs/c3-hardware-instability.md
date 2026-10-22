@@ -9,7 +9,7 @@ MSI MAG Z790 TOMAHAWK MAX WIFI (BIOS A.B0, 2026-03-04), **Intel Core i9-14900K**
 
 ## What was done (reversible, not persistent)
 `echo 0 > /sys/devices/system/cpu/cpu9/online; echo 0 > /sys/devices/system/cpu/cpu8/online`. Result: **145 consecutive `openstack` calls without a crash**, then the 17 VMs were started with `c3-vms-start.sh`, front doors 200, Patroni `db2` Leader / `db1` Sync Standby, 6 of 6 nodes Ready, 4 load balancers ONLINE (cka-api ERROR: cka is off). No kernel event since. Before the change, 4 events in 90 seconds, so this is strong evidence but not proof (the faults were sporadic).
-**The core comes back at the next reboot.** To keep it off: a systemd unit that offlines CPUs 8 and 9 at boot (not installed; needs approval), or the kernel parameter / BIOS (disable that core).
+**Persistent since the same night:** `/etc/systemd/system/c3-offline-cpus.service` (copy in `scripts/c3-offline-cpus.service`), a oneshot ordered before libvirt and nova-compute that writes 0 to `/sys/devices/system/cpu/cpu9/online` and `cpu8`, enabled. It has no `ExecStop` on purpose (stopping it, also at shutdown, must not bring the core back). **Verified:** unit enabled, `systemd-analyze verify` clean, started now with the cores already off (idempotent); **not yet verified at a real boot**: after the next reboot check `cat /sys/devices/system/cpu/offline` (expect `8-9`). To undo after the memtest/BIOS/RMA work: `systemctl disable --now c3-offline-cpus` and `echo 1 > /sys/devices/system/cpu/cpu8/online` (and `cpu9`), or reboot. Alternatives: BIOS (disable that core) or a kernel parameter.
 
 ## What to do (owner)
 1. **Memory test:** boot memtest86+ (USB) for at least two full passes over the 80 GB (hours); a failure there says RAM, not CPU.
