@@ -48,8 +48,9 @@ nodes:
   # c3 waits 5 minutes so etcd takes one member at a time. m1.small: the host's RAM allocation limit is the constraint (docs/k8s-ha-control-plane.md).
   c2-prod: { role: controller_join, flavor: m1.small }
   c3-prod: { role: controller_join, flavor: m1.small, vars: { join_delay: "300" } }
-  w1-prod: { role: worker, flavor: m1.small }   # re-added 2026-10-20 (a fresh VM; the first w1 was retired the same day)
-  w2-prod: { role: worker, flavor: m1.small }
-  w3-prod: { role: worker, flavor: m1.small }
+  # workers: flavor k8s.worker = 2 vCPU, 4 GB, 20 GB disk (resized in place from m1.small on 2026-10-22: the CI browser image did not fit in 10 GB)
+  w1-prod: { role: worker, flavor: k8s.worker }   # re-added 2026-10-20 (a fresh VM; the first w1 was retired the same day)
+  w2-prod: { role: worker, flavor: k8s.worker }
+  w3-prod: { role: worker, flavor: k8s.worker }
 
   # c2, w4, w5, w6 were decommissioned by removing them from this file.
