@@ -6,6 +6,15 @@ Update this file in the same commit as any change, and list anything done **by h
 
 ---
 
+## 2026-11-06: `s3` (192.168.2.4) after the motherboard swap, Terraform backend refused
+
+- `terraform plan` failed with `connection refused` on `http://192.168.2.4:9000`. Cause: after the reboot the `rustfs` container (`/opt/rustfs`, compose) was running and healthy inside, but Docker had **not published its ports** (empty NAT `DOCKER` chain, no listener on 192.168.2.4:9000 or :80), probably because the container started before the network/firewall rules were ready (ports are bound to `192.168.2.4`).
+- Fix, done by the owner on `s3`: `cd /opt/rustfs && docker compose up -d --force-recreate` (state is on the bind mount `/opt/rustfs/data`, untouched). Terraform works again.
+- If it recurs after a reboot: same command. Possible hardening (not done): order Docker after `network-online.target`.
+- Not in Terraform: nothing changed in code.
+
+---
+
 ## 2026-10-20 (later): automatic database failover (Patroni)
 
 ### Breaking changes
@@ -47,6 +56,9 @@ Update this file in the same commit as any change, and list anything done **by h
 
 ### 2026-10-22: prod database VMs, witness and runner renamed in place (`db1-prod`, `db2-prod`, `dbw1-prod`, `ci1-prod`)
 - Hostname, `/etc/hosts` and the OpenStack server name only (`scripts/vm-rename-in-place.sh`), nothing restarted: after each rename Patroni stayed `db1` Leader + `db2` Sync Standby, etcd 3 of 3, the front door 200; the GitHub runner `finance-runner` stayed online and the monitor kept running. **Internal names did not change**: Patroni and etcd members are still `db1`, `db2`, `dbw1` (they are fixed in `/etc/patroni/config.yml` and `/etc/default/etcd`). To keep that true when a database VM is rebuilt, `nodes.yaml` has `member: db1` for the VM `db1-prod`, `environments/prod/main.tf` builds the group's member list from `member`, and `cloud-init/files/db-ha-node.sh` now finds its own member name **by its address** instead of by hostname. The runner is `ci1-prod` (role `runner`). `nodes.yaml` keys, `moved.tf`; **`terraform plan` must again replace no VM**. Mac: ssh aliases `db1`, `db2`, `runner`/`ci1` pinned to the floating IPs (`*-prod` patterns work through DNS after the apply). Docs/scripts say `ssh ci1`.
+
+### 2026-11-07: `latest` in the Terraform-state backups was a broken link on c3 (fixed)
+- `/backup/terraform-state/latest` on s3 was an absolute link (`/backup/terraform-state/<snapshot>`); c3's hourly pull (`rsync -a`) copies links as written, and c3 has no `/backup/terraform-state`, so `latest` dangled on c3 (the snapshot folders were fine). `scripts/s3-tfstate-backup.sh` now writes a **relative** link (`ln -sfn <snapshot>`), installed on s3 as `/usr/local/sbin/tfstate-backup`; today's link was re-pointed by hand and c3's copy follows at its next pull. Also seen: s3 rebooted three times on 6/7 November (22:41, 09:52, 11:15); the first backup run after the 22:41 boot failed once because RustFS was not up yet (the next run was fine). Not in Terraform: the script on s3.
 
 ### 2026-10-24: cka cluster switched from containerd to Docker (cri-dockerd); cka kubelets enabled
 - **Container runtime of the cka cluster is now Docker Engine** (`docker.io` 29.1.3) through `cri-dockerd` 0.4.9 (the kubelet no longer has Docker support built in), on all four nodes, one node at a time with the new `scripts/k8s-runtime-docker.sh` (workers drained and uncordoned; control plane `c1` after an etcd snapshot, the API away about a minute). Old containerd images and sandboxes removed; `kubectl get nodes -o wide` shows `docker://29.1.3`; a test pod pulled an image, ran and resolved DNS; 0 non-running pods. Prod and qa stay on containerd; the Terraform templates were not changed, so a rebuilt cka node starts on containerd. Details, go-back steps and the exam note: `docs/k8s-docker-runtime.md`.

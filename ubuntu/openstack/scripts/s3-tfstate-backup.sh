@@ -32,6 +32,8 @@ if [ -d "$DEST/latest" ] && diff -r "$DEST/latest/" "$TMP/" >/dev/null 2>&1; the
 fi
 SNAP="$DEST/$(date +%Y%m%d-%H%M%S)"
 mv "$TMP" "$SNAP"; chmod -R go-rwx "$SNAP"; chmod 700 "$DEST"
-ln -sfn "$SNAP" "$DEST/latest"; touch "$DEST/last-ok"
+# a RELATIVE link: the folder is copied to c3 (rsync -a keeps links as written), where /backup/terraform-state does not exist, so an absolute
+# target would dangle there (found 2026-11-07)
+ln -sfn "$(basename "$SNAP")" "$DEST/latest"; touch "$DEST/last-ok"
 ls -1d "$DEST"/2* | head -n -"$KEEP" | xargs -r rm -rf
 echo "snapshot $SNAP ($n states)"
