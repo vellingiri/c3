@@ -3,7 +3,7 @@
 # Run ON s3:  python3 s3-purge-state-prefix.py <prefix>/            (dry run: lists what is there and the live state's versions)
 #             python3 s3-purge-state-prefix.py <prefix>/ apply      (saves the state versions to /backup/legacy-state-export/<prefix>-<time>.tgz, then deletes
 #                                                                    every version and delete marker under the prefix, then checks openstack/infra is unchanged)
-# Refuses any prefix that starts with "openstack" (those are the live states). Used on 2026-11-07 for infra/ and nodes/; v2/ is still there. docs/s3-state-store.md.
+# Refuses any prefix that starts with "openstack" (those are the live states). Used on 2026-11-07 for infra/, nodes/ and v2/ (all three gone). docs/s3-state-store.md.
 import re, subprocess, sys, os, json, hashlib, tarfile, time
 PREFIX = sys.argv[1]            # e.g. "infra/"  (the top-level legacy key prefix, never "openstack/...")
 APPLY = len(sys.argv) > 2 and sys.argv[2] == "apply"
