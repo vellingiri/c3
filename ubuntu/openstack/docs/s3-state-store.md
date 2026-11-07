@@ -31,3 +31,6 @@ Check any time: `ssh s3 'ls -l /backup/terraform-state/last-ok /backup/terraform
 
 ## Terraform lock trap
 A killed or interrupted `terraform plan` leaves a lock (`terraform.tfstate.tflock`): "Error acquiring the state lock ... PreconditionFailed". If no Terraform is running anywhere, `terraform force-unlock <ID from the message>` (seen 2026-10-20).
+
+## Old key prefixes (2026-11-07)
+The bucket's live states are under `openstack/` (`infra`, `cka/nodes`, `prod/nodes`, `qa/nodes`). Before 17 October they were stored under top-level `infra/`, `nodes/` and `v2/`; those objects were deleted when the states moved, but versioning keeps their old versions. `infra/` and `nodes/` were purged on 2026-11-07, `v2/` (mostly old prod versions, 5.7 MB) remains as history. Remove such prefixes only through the S3 API with `scripts/s3-purge-state-prefix.py` (it refuses `openstack/...`, saves the state versions first and checks the live infra state afterwards), never by deleting files in `/opt/rustfs/data`. The hourly snapshot job only copies current objects, so it never included them. Copies of the purged states: `/backup/legacy-state-export/` on s3.
