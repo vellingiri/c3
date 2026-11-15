@@ -49,11 +49,11 @@ need_file() { [ -e "$1" ] || { echo "missing in bundle: $1" >&2; exit 1; }; }
 wait_http() { # wait_http <url> <seconds> [expected code regexp]
   local i; for i in $(seq 1 "$2"); do curl -s -o /dev/null -m 3 -w '%{http_code}' "$1" 2>/dev/null | grep -q -E "${3:-^(200|300|401)$}" && return 0; sleep 2; done
   echo "timeout waiting for $1" >&2; return 1; }
-# the admin credentials: the OS_* exports of root's shell profile (restored from the bundle). Not sourced as a whole, because .bashrc stops early in a non-interactive shell.
-load_os_env() { eval "$(grep -E '^export OS_' /root/.bashrc 2>/dev/null)"; }
+# the admin credentials: /etc/keystonerc (restored from the bundle in phase 3; root's .bashrc only sources it).
+load_os_env() { if [ -r /etc/keystonerc ]; then . /etc/keystonerc; else eval "$(grep -E '^export OS_' /root/.bashrc 2>/dev/null)"; fi; }   # /etc/keystonerc is restored in phase 3; the old grep of .bashrc found nothing on the live host (2026-11-15)
 
 # ------------------------------------------------------------------------------------------------------------------------------------ packages
-PKG_BASE="ifupdown bridge-utils openssh-server rsync curl git jq crudini nftables chrony python3-pymysql ca-certificates gnupg"
+PKG_BASE="ifupdown bridge-utils openssh-server rsync curl git jq crudini nftables systemd-timesyncd python3-pymysql ca-certificates gnupg"   # time: systemd-timesyncd, as on the live host (chrony would replace it; found by the audit of 2026-11-15)
 PKG_INFRA="mariadb-server rabbitmq-server memcached apache2 libapache2-mod-wsgi-py3"
 PKG_IDENTITY="keystone glance placement-api python3-openstackclient python3-keystoneclient python3-glanceclient"
 PKG_COMPUTE="nova-api nova-conductor nova-scheduler nova-compute nova-compute-kvm nova-consoleproxy python3-novaclient libvirt-daemon-system libvirt-clients qemu-system-x86 qemu-utils"

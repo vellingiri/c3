@@ -13,7 +13,8 @@
 # rebuild; `amp_flavor_id = 100` (flavor m1.octavia) and the image tag `Amphora` are stable and were put back by c3-dr-install.sh.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"            # .../scripts
-eval "$(grep -E '^export OS_' /root/.bashrc)"
+# the admin credentials live in /etc/keystonerc (root's .bashrc only sources it; grepping .bashrc for `export OS_` found nothing on the live host, found 2026-11-15)
+if [ -r /etc/keystonerc ]; then . /etc/keystonerc; else eval "$(grep -E '^export OS_' /root/.bashrc 2>/dev/null)"; fi
 say() { printf '\n== %s\n' "$*"; }
 
 ext_net_id()  { openstack network show external_network -f value -c id; }

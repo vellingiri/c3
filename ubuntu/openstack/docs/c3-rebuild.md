@@ -3,6 +3,8 @@
 If the machine `c3` is lost (disk failure, fire, a bad upgrade), everything in this lab goes with it: the OpenStack cloud, every VM, both Kubernetes clusters, the database pair, the load balancers.
 This page and the scripts in `scripts/c3-dr/` are how to get all of it back on a new machine of the same kind. Written 2026-10-21. **Read "Test status" first.**
 
+> **One script, 2026-11-15:** `scripts/c3-rebuild-all.sh` runs this whole page in order, as a **dry run by default**, with logs, and also checks everything changed since this page was written (settings, flavors, the disk layout, the s3 and router backups). Its audit of c3 and what it found (**there is no capture bundle yet**) is in `docs/c3-rebuild-all.md`. The credential loading of `c3-dr-post.sh` and the installer was fixed the same day (it read `/root/.bashrc` instead of `/etc/keystonerc`).
+
 The platform was originally built by following Server World's *OpenStack Epoxy on Debian 13* series ([overview](https://www.server-world.info/en/note?os=Debian_13&p=openstack_epoxy&f=1);
 Keystone, Glance, Nova, Neutron with OVN, Horizon, Designate, Octavia), with Apache instead of nginx in front of Keystone. The rebuild does not retype those steps: it **puts back the configuration that is
 captured every night** and re-creates what is not configuration (databases that can be rebuilt, VMs, networks) from Terraform.
