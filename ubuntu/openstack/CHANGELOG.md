@@ -7,6 +7,13 @@ Update this file in the same commit as any change, and list anything done **by h
 ---
 
 
+
+## 2026-11-15: `c3-rebuild-all.sh` validates its arguments and needs a mode
+
+- Run with no arguments from the Mac it created its log directory first and then failed with "cannot create /var/log/c3-rebuild". It now validates the command line and the machine **before** anything is created:
+  a mode is required (`--dry-run` or `--apply`; with no arguments it only prints the usage), an option missing its value, an unknown option, a bad stage name, a missing directory or device, and conflicting options each stop it with exit code 2 and one line saying why,
+  and it refuses to run anywhere but a Linux host as root ("run it on c3"). `--list` and `--help` still work anywhere. This replaces the old "dry run by default"; nothing runs the script on a schedule, so nothing else is affected.
+
 ## 2026-11-15: the `s3` host is `backup` again (`backup.rdulinux.com`)
 
 - With the state store on the `s3-prod` VM and the old RustFS container stopped, the machine at 192.168.2.4 is only the backup machine again, so it has its old name back.

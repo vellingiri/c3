@@ -2,8 +2,9 @@
 # c3-rebuild-all.sh - ONE script for the whole of c3: audit it, or build it from nothing, in the order the runbook (docs/c3-rebuild.md) uses.
 # Run ON c3 (or the new host) as root, from a checkout of this repository.
 #
-#   c3-rebuild-all.sh                         DRY RUN (the default): changes NOTHING. Every stage reads the live state, compares it with what this lab is
+#   c3-rebuild-all.sh --dry-run               DRY RUN: changes NOTHING. Every stage reads the live state, compares it with what this lab is
 #                                             supposed to look like, and prints OK / DRIFT (would be changed) / WARN / SKIP / WOULD (the command it would run).
+#                                             A mode (--dry-run or --apply) is REQUIRED: with no arguments the script only prints this usage and exits.
 #   c3-rebuild-all.sh --apply [--bundle DIR]  really does it. Asks you to type 'rebuild' (--yes skips the question). Stops at the first failed step
 #                                             (--keep-going continues). Safe to re-run: every step first checks whether it is already done.
 #
@@ -29,27 +30,70 @@ set -uo pipefail
 
 # ------------------------------------------------------------------------------------------------------------------------------------ options
 SELF=$(readlink -f "${BASH_SOURCE[0]:-$0}" 2>/dev/null || echo "$0")
-MODE=dry; BUNDLE=""; ONLY=""; FROM=""; SKIP=""; YES=0; KEEP_GOING=0; REPO=""; TF_REPO=""; FINANCE_REPO=""; NOVA_DEV=""
+MODE=""; BUNDLE=""; ONLY=""; FROM=""; SKIP=""; YES=0; KEEP_GOING=0; REPO=""; TF_REPO=""; FINANCE_REPO=""; NOVA_DEV=""
 REINSTALL=0; OFFLINE_CPUS=0; INSTALL_CAPTURE=0; RESTORE_ROUTER=0; LOG_DIR=/var/log/c3-rebuild
 STAGES="preflight layout platform tuning tf-infra octavia api-lbs tf-prod tf-cka app-lbs apps backup-host router backups verify"
+usage_short() {
+  cat >&2 <<USAGE
+usage: $(basename "$0") --dry-run | --apply  [options]
+
+  --dry-run            audit only: reads the live state and changes nothing
+  --apply              really rebuild (asks you to type 'rebuild'; --yes skips the question)
+  --only a,b | --from STAGE | --skip a,b     choose stages        --list   print the stages
+  --bundle DIR  --repo DIR  --tf-repo DIR  --finance-repo DIR  --nova-dev DEV  --log-dir DIR
+  --reinstall  --offline-cpus  --install-capture  --restore-router  --keep-going  --yes
+  -h, --help           the full description
+
+Runs ON c3 (or the new host), as root. Nothing happens until you choose a mode.
+USAGE
+}
+bad() { echo "error: $*" >&2; echo "(see --help)" >&2; exit 2; }
+# the value of an option: present, and not another option
+val() { [ $# -ge 2 ] && [ -n "$2" ] && [ "${2#-}" = "$2" ] || bad "$1 needs a value"; }
+[ $# -gt 0 ] || { usage_short; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dry-run) MODE=dry ;; --apply) MODE=apply ;; --yes) YES=1 ;; --keep-going) KEEP_GOING=1 ;;
-    --bundle) BUNDLE=$2; shift ;; --only) ONLY=$2; shift ;; --from) FROM=$2; shift ;; --skip) SKIP=$2; shift ;;
-    --repo) REPO=$2; shift ;; --tf-repo) TF_REPO=$2; shift ;; --finance-repo) FINANCE_REPO=$2; shift ;; --nova-dev) NOVA_DEV=$2; shift ;;
+    --dry-run) [ "$MODE" = apply ] && bad "--dry-run and --apply are opposites; choose one"; MODE=dry ;;
+    --apply)   [ "$MODE" = dry ]   && bad "--dry-run and --apply are opposites; choose one"; MODE=apply ;;
+    --yes) YES=1 ;; --keep-going) KEEP_GOING=1 ;;
+    --bundle) val "$@"; BUNDLE=$2; shift ;; --only) val "$@"; ONLY=$2; shift ;; --from) val "$@"; FROM=$2; shift ;; --skip) val "$@"; SKIP=$2; shift ;;
+    --repo) val "$@"; REPO=$2; shift ;; --tf-repo) val "$@"; TF_REPO=$2; shift ;; --finance-repo) val "$@"; FINANCE_REPO=$2; shift ;; --nova-dev) val "$@"; NOVA_DEV=$2; shift ;;
     --reinstall) REINSTALL=1 ;; --offline-cpus) OFFLINE_CPUS=1 ;; --install-capture) INSTALL_CAPTURE=1 ;; --restore-router) RESTORE_ROUTER=1 ;;
-    --log-dir) LOG_DIR=$2; shift ;; --list) echo $STAGES | tr ' ' '\n'; exit 0 ;;
+    --log-dir) val "$@"; LOG_DIR=$2; shift ;; --list) echo $STAGES | tr ' ' '\n'; exit 0 ;;
     -h|--help) sed -n 2,30p "$SELF"; exit 0 ;;
-    *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
+    -*) bad "unknown option: $1" ;;
+    *)  bad "unexpected argument: $1 (options start with --)" ;;
   esac
   shift
 done
+
+# ---- what was asked for must make sense, before anything is touched
+[ -n "$MODE" ] || bad "choose a mode: --dry-run (audit, changes nothing) or --apply (rebuild)"
+# `s3` was the name of the stage now called backup-host until 2026-11-15: still accepted
+ONLY=$(printf '%s' "$ONLY" | sed -E 's/(^|,)s3(,|$)/\1backup-host\2/g'); SKIP=$(printf '%s' "$SKIP" | sed -E 's/(^|,)s3(,|$)/\1backup-host\2/g'); [ "$FROM" = s3 ] && FROM=backup-host
+check_stages() {   # check_stages OPTION LIST
+  local x; for x in $(printf '%s' "$2" | tr ',' ' '); do
+    case " $STAGES " in *" $x "*) ;; *) bad "$1: '$x' is not a stage. Stages: $STAGES" ;; esac
+  done
+}
+check_stages --only "$ONLY"; check_stages --skip "$SKIP"; [ -z "$FROM" ] || check_stages --from "$FROM"
+[ -z "$ONLY" ] || { [ -z "$FROM" ] && [ -z "$SKIP" ]; } || bad "--only already says exactly which stages; do not combine it with --from or --skip"
+[ "$MODE" = apply ] || { [ "$YES" = 0 ] && [ "$KEEP_GOING" = 0 ]; } || bad "--yes and --keep-going only make sense with --apply"
+[ -z "$BUNDLE" ]       || [ -d "$BUNDLE" ]       || bad "--bundle: $BUNDLE is not a directory"
+[ -z "$REPO" ]         || [ -d "$REPO/scripts" ] || bad "--repo: $REPO is not a checkout of this repository (no scripts/ in it)"
+[ -z "$TF_REPO" ]      || [ -d "$TF_REPO" ]      || bad "--tf-repo: $TF_REPO is not a directory"
+[ -z "$FINANCE_REPO" ] || [ -d "$FINANCE_REPO" ] || bad "--finance-repo: $FINANCE_REPO is not a directory"
+[ -z "$NOVA_DEV" ]     || [ -b "$NOVA_DEV" ]     || bad "--nova-dev: $NOVA_DEV is not a block device"
+
+# ---- and it has to be the right machine, as the right user (a dry run reads root-only state too)
+[ "$(uname -s)" = Linux ] || bad "this runs ON c3 (or the new host), not on $(hostname) ($(uname -s)). From your Mac: ssh c3, then run it there"
+[ "$(id -u)" = 0 ]        || bad "run it as root (uid is $(id -u), user $(id -un)) on c3 or the new host"
 if [ -z "$REPO" ]; then REPO=$(cd "$(dirname "$SELF")/.." 2>/dev/null && pwd); fi
 [ -n "$TF_REPO" ] || TF_REPO=$REPO
 DR="$REPO/scripts/c3-dr"
 
 # ------------------------------------------------------------------------------------------------------------------------------------ logging
-mkdir -p "$LOG_DIR" 2>/dev/null || { echo "cannot create $LOG_DIR" >&2; exit 2; }
+mkdir -p "$LOG_DIR" 2>/dev/null || { echo "error: cannot create the log directory $LOG_DIR (is the disk writable? or pass --log-dir DIR)" >&2; exit 2; }
 RUN_ID=$(date +%Y%m%d-%H%M%S)
 LOG="$LOG_DIR/c3-rebuild-$MODE-$RUN_ID.log"; SUMMARY="${LOG%.log}.summary.tsv"
 : > "$SUMMARY"
@@ -426,8 +470,6 @@ print(dict(c))" 2>/dev/null)"
   info "timers: $(systemctl list-timers --no-pager 2>/dev/null | grep -E 'ovn|k8s|tfstate' | awk '{print $(NF-1)}' | tr '\n' ' ')"
 }
 
-# `s3` was this stage's name until 2026-11-15 (the host went back to being `backup`): still accepted in --only, --from and --skip
-ONLY=$(printf '%s' "$ONLY" | sed -E 's/(^|,)s3(,|$)/\1backup-host\2/g'); SKIP=$(printf '%s' "$SKIP" | sed -E 's/(^|,)s3(,|$)/\1backup-host\2/g'); [ "$FROM" = s3 ] && FROM=backup-host
 # ------------------------------------------------------------------------------------------------------------------------------------ run
 SEL="all stages"; [ -n "$FROM" ] && SEL="from $FROM"; [ -n "$ONLY" ] && SEL="only $ONLY"; [ -n "$SKIP" ] && SEL="$SEL, skipping $SKIP"
 log "INFO " "c3-rebuild-all.sh  mode=$MODE  host=$(hostname)  repo=$REPO  stages: $SEL"

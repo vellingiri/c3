@@ -1,16 +1,19 @@
 # `c3-rebuild-all.sh`: one script for the whole of c3, and the audit of 2026-11-15
 
-`scripts/c3-rebuild-all.sh` audits `c3` or builds it from nothing, in the order of `docs/c3-rebuild.md`, with a **dry run by default** and a log of every step. It does not replace the pieces that already existed (`scripts/c3-dr/c3-dr-install.sh`, `c3-dr-post.sh`, `c3-dr-capture.sh`, the Terraform folders, `k8s/bootstrap.sh`); it **runs them in the right order, checks each result, and adds everything that was changed since they were written** (settings, timers, flavors, the disk layout, the backup and router backups). Written 2026-11-15.
+`scripts/c3-rebuild-all.sh` audits `c3` or builds it from nothing, in the order of `docs/c3-rebuild.md`, with a **dry run you ask for explicitly** (`--dry-run`; the script does nothing until you choose `--dry-run` or `--apply`) and a log of every step. It does not replace the pieces that already existed (`scripts/c3-dr/c3-dr-install.sh`, `c3-dr-post.sh`, `c3-dr-capture.sh`, the Terraform folders, `k8s/bootstrap.sh`); it **runs them in the right order, checks each result, and adds everything that was changed since they were written** (settings, timers, flavors, the disk layout, the backup and router backups). Written 2026-11-15.
 
 ## How to run it
 On c3, as root, from a checkout of this repository (on c3 today: `/nfsshare/c3/ubuntu/openstack`, a plain copy):
 ```bash
 cd /nfsshare/c3/ubuntu/openstack/scripts
-./c3-rebuild-all.sh                         # DRY RUN (default): changes nothing, prints OK / DRIFT / WARN / SKIP / WOULD
-./c3-rebuild-all.sh --only layout,tuning    # some stages (names below); also --from STAGE and --skip a,b; --list shows the stages
+./c3-rebuild-all.sh --dry-run               # DRY RUN: changes nothing, prints OK / DRIFT / WARN / SKIP / WOULD   (with no arguments it only prints the usage)
+./c3-rebuild-all.sh --dry-run --only layout,tuning    # some stages (names below); also --from STAGE and --skip a,b; --list shows the stages
 ./c3-rebuild-all.sh --apply --bundle /root/c3-dr/bundles/latest     # really does it; asks you to type 'rebuild' (--yes skips); stops at the first FAIL (--keep-going)
 ```
 Options: `--tf-repo DIR` (where the Terraform code and `secrets.auto.tfvars` are), `--finance-repo DIR`, `--nova-dev /dev/nvme0n1pN` (a partition you made, to mount at `/var/lib/nova`), `--reinstall` (let the platform installer run over an existing OpenStack), `--offline-cpus` (keep CPUs 8-9 offline), `--install-capture` (the nightly capture timer), `--restore-router`, `--log-dir`.
+
+## What it checks before it starts
+It validates the command line first and refuses, with exit code 2 and a one-line reason, before creating a log or touching anything: no mode given (`--dry-run` or `--apply` is required, and with no arguments only the usage is printed), both modes at once, an option missing its value, an unknown option or stray word, a stage name that does not exist (`--only`, `--from`, `--skip`; the old name `s3` is accepted for `backup-host`), `--only` combined with `--from` or `--skip`, `--yes` or `--keep-going` without `--apply`, and a `--bundle`, `--repo`, `--tf-repo`, `--finance-repo` or `--nova-dev` that does not exist. It then checks that it is running on a Linux host as root, because the audit reads root-only state: run from the Mac it says to `ssh c3` instead. `--list` and `--help` work anywhere.
 
 ## Stages
 | Stage | Checks (dry run) | `--apply` does |
