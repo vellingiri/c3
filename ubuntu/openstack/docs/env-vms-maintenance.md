@@ -5,7 +5,7 @@
 ```bash
 scripts/env-vms.py status prod                    # VMs and their state, Kubernetes nodes Ready, Patroni roles
 scripts/env-vms.py stop   prod --dry-run          # the plan, nothing changes
-scripts/env-vms.py stop   prod                    # asks you to type "prod"; --yes skips the question
+scripts/env-vms.py stop   prod                    # no confirmation question (add --confirm to be asked to type "prod")
 scripts/env-vms.py start  prod                    # brings back exactly what the last stop stopped
 scripts/env-vms.py start  prod --all              # every VM of the environment that is SHUTOFF (no saved list needed)
 ```

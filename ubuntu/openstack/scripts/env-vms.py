@@ -20,7 +20,7 @@ graceful shutdown leaves and prints the checks (nodes, Patroni, the finance fron
 
 `stop` remembers what it stopped in ~/.cache/c3-env-vms/<env>.json, so `start` brings back exactly those VMs and not one that was off on
 purpose. Without that file, `start --all` starts every VM of the environment that is SHUTOFF.
-`--dry-run` shows the plan and changes nothing. `stop` asks you to type the environment name unless you pass --yes.
+`--dry-run` shows the plan and changes nothing. `stop` does NOT ask for confirmation (use `--dry-run` to look first, or `--confirm` to be asked).
 Starting the VMs needs no Terraform: this is the OpenStack API directly (a later `terraform apply` simply sees them active).
 """
 import argparse
@@ -278,7 +278,7 @@ def cmd_stop(env, args):
     if args.dry_run:
         say("(dry run: nothing stopped)")
         return
-    if not args.yes:
+    if args.confirm:                                  # asking is opt-in: a maintenance window should not need an extra answer
         ans = input("Type the environment name (%s) to stop these %d VMs: " % (env, len(running)))
         if ans.strip() != env:
             die("cancelled")
@@ -373,7 +373,8 @@ def main():
     ap = argparse.ArgumentParser(description="Stop, start or show all the VMs of one environment in a safe order.")
     ap.add_argument("command", choices=["stop", "start", "status"])
     ap.add_argument("env", help="prod | cka | qa")
-    ap.add_argument("--yes", action="store_true", help="stop: do not ask for the environment name")
+    ap.add_argument("--confirm", action="store_true", help="stop: ask for the environment name first (by default it does not ask)")
+    ap.add_argument("--yes", action="store_true", help=argparse.SUPPRESS)   # old option, now the default; accepted and ignored
     ap.add_argument("--dry-run", action="store_true", help="show the plan only")
     ap.add_argument("--all", action="store_true", help="start: every VM of the environment that is SHUTOFF, not just what the last stop saved")
     ap.add_argument("--no-cleanup", action="store_true", help="start: keep the leftover Error pod records")
