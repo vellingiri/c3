@@ -34,3 +34,40 @@ A killed or interrupted `terraform plan` leaves a lock (`terraform.tfstate.tfloc
 
 ## Old key prefixes (2026-11-07)
 The bucket's live states are under `openstack/` (`infra`, `cka/nodes`, `prod/nodes`, `qa/nodes`). Before 17 October they were stored under top-level `infra/`, `nodes/` and `v2/`; those objects were deleted when the states moved, but versioning keeps their old versions. All three (`infra/`, `nodes/` and `v2/`, the first 72 prod versions built up on 17 October) were purged on 2026-11-07; the bucket now holds only `openstack/`. Remove such prefixes only through the S3 API with `scripts/s3-purge-state-prefix.py` (it refuses `openstack/...`, saves the state versions first and checks the live infra state afterwards), never by deleting files in `/opt/rustfs/data`. The hourly snapshot job only copies current objects, so it never included them. Copies of the purged states: `/backup/legacy-state-export/` on s3 (`infra-`, `nodes-` and `v2-` tarballs of 2026-11-07, 5 + 78 state versions; delete them when you are sure).
+
+## Moving the state store to the `s3-prod` VM (built 2026-11-15, not yet switched)
+
+The desktop machine `s3` is a single point of failure for every Terraform state. A VM on `c3` now holds an identical copy, and the desktop machine goes back to being what its old name said: the backup box.
+
+**State today:** `s3-prod` (`s3-prod.rdulinux.com`, floating IP 192.168.2.99, role `objstore`, flavor `m1.small-20g`, in `environments/prod/nodes.yaml`) runs the same RustFS image (1.0.2, image id `7e948dad4748`) on the same data, a copy taken 2026-11-15 and verified object by object and version by version (4 objects, 438 versions, identical ids and sizes). **Terraform still uses the old host** (`192.168.2.4:9000`): every backend is unchanged. Nothing was cut over, so nothing can be lost by it.
+
+### What protects it (all in place)
+| Layer | What | Where |
+|---|---|---|
+| Versioned bucket | every write keeps the previous version | on the VM |
+| Whole-store pull, hourly at :20 | dated, hard-linked snapshots of `/opt/rustfs/data`, 200 kept, read-only key (`rrsync -ro /opt/rustfs`), nothing a mirror could delete | backup box: `/backup/rustfs-vm/<time>/`, `latest`, `last-ok`; `rustfs-vm-pull.timer` (`scripts/rustfs-vm-pull.sh`, `scripts/install-rustfs-vm-pull.sh`) |
+| API-level state snapshots | every state as JSON, checked for a `serial` | `/backup/terraform-state/` on the backup box and the hourly pull to `c3:/root/backups/terraform-state/` (unchanged; see "Switching" for the keys) |
+| Rebuild kit | the exact image and the settings (root only, they hold the keys) | backup box: `/backup/rustfs-vm-config/` |
+| Pre-migration copy | the old store as it was before anything started | backup box `/backup/rustfs-premigration/` and `c3:/root/backups/rustfs-premigration/` (sha256 beside it) |
+
+### Restore (rehearsed on 2026-11-15: a real restore into the VM, health 200, 4 state objects)
+```bash
+scripts/s3-vm-restore.sh --list                # snapshots on the backup box
+scripts/s3-vm-restore.sh --dry-run
+scripts/s3-vm-restore.sh                       # newest; or: scripts/s3-vm-restore.sh 20261115-133654
+```
+The current data is **moved aside** to `/opt/rustfs/data.before-restore-<time>`, never deleted, so a wrong choice is undone by moving it back. On a brand-new VM (a rebuild: `terraform apply -target='module.node["s3-prod"]'`, then this script) the image and keys come from `/backup/rustfs-vm-config`. A restore of the pre-migration tarball into a scratch RustFS was also tried (4 state objects). Afterwards `terraform plan` in `infra` and every environment must show no changes.
+
+### Switching Terraform to the VM (when you decide to)
+1. No Terraform running anywhere. Re-copy and compare: `scripts/s3-vm-migrate.sh` (it ends with `IDENTICAL`; `--check` only compares).
+2. Replace `http://192.168.2.4:9000` by `http://s3-prod.rdulinux.com:9000` (the name, so a later move needs no code change) in `infra/backend.tf`, `environments/{prod,qa,cka}/backend.tf` and the `terraform_remote_state` block of `environments/{prod,qa,cka}/main.tf`; also `S3_HEALTH_URL` in `scripts/db-replication-monitor.sh` and the address in `scripts/c3-rebuild-all.sh`, `scripts/s3-purge-state-prefix.py` and `scripts/s3-tfstate-backup.sh`.
+3. In `infra` and each environment: `terraform init -reconfigure`, then `terraform plan`. **Expect no change from the move itself** (see the drift note below).
+4. On the backup box, `/etc/tfstate-backup.env` (root, 600) with `ENDPOINT=http://s3-prod.rdulinux.com:9000`, `AK=...`, `SK=...` (the keys are the ones in `/backup/rustfs-vm-config/rustfs.env`); `tfstate-backup` then snapshots the VM's store, and `c3`'s pull keeps working unchanged.
+5. Leave the old container running and unused for a week, then stop it (keep `/opt/rustfs/data`).
+**Rollback** before step 5: put the old address back and `terraform init -reconfigure`. If a state was written to the VM after the switch, copy the VM's data back first (`scripts/s3-vm-migrate.sh` with `OLD_S3`/`S3_VM` swapped), or use the snapshots as in "If a state is damaged or lost".
+
+### Traps found while building it
+- **`terraform plan` in `environments/prod` wants to power on every prod VM** while the environment is stopped (`power_state "shutoff" -> "active"` on all 10 stopped VMs). That is the stop being seen as drift, not a change anyone wrote. **Never apply a full plan while prod is stopped.** Add or change one VM with `-target`: `terraform plan -target='module.node["s3-prod"]'` shows `6 to add, 0 to change`; check that line before applying. (`terraform apply -refresh-only` would accept the stop into the state if you prefer a clean plan.)
+- **`scripts/env-vms.py` must never stop `s3-prod`.** It stops every VM with `env=prod`, and an unknown role was ranked as a worker: a prod stop took the state store down seven minutes after the VM was created. Role `objstore` is now skipped (`NEVER_STOP_ROLES`); **every copy of the script must have this**, an older copy will stop it again. If it is stopped, `openstack server start s3-prod` and Terraform works again.
+- cloud-init needs `package_update: true` for `docker.io` on a fresh image; fixed in `cloud-init/objstore.yaml.tftpl`.
+

@@ -10,8 +10,13 @@ ENDPOINT=http://192.168.2.4:9000
 DEST=/backup/terraform-state
 KEEP=300
 
-AK=$(docker inspect rustfs --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^RUSTFS_ACCESS_KEY=//p')
-SK=$(docker inspect rustfs --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^RUSTFS_SECRET_KEY=//p')
+# After the store moved to the s3-prod VM (docs/s3-state-store.md) there is no local container to read the keys from: /etc/tfstate-backup.env (root, mode 600)
+# then sets ENDPOINT, AK and SK. Without that file nothing changes: the endpoint above and the keys of the local `rustfs` container, as before.
+[ -r /etc/tfstate-backup.env ] && . /etc/tfstate-backup.env
+if [ -z "${AK:-}" ] || [ -z "${SK:-}" ]; then
+  AK=$(docker inspect rustfs --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^RUSTFS_ACCESS_KEY=//p')
+  SK=$(docker inspect rustfs --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^RUSTFS_SECRET_KEY=//p')
+fi
 s3() { curl -fsS --aws-sigv4 "aws:amz:us-east-1:s3" --user "$AK:$SK" "$@"; }
 
 mkdir -p "$DEST"
