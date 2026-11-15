@@ -6,8 +6,8 @@ Update this file in the same commit as any change, and list anything done **by h
 
 ---
 
-## 2026-11-15 — the Terraform state store gets a VM on c3 (`s3-prod`), not yet switched
-- New role `objstore` (`modules/node`, `cloud-init/objstore.yaml.tftpl`) and node `s3-prod` in `environments/prod/nodes.yaml`: RustFS 1.0.2, a verified copy of the state store of the desktop `s3` host (4 objects, 438 versions, identical). Terraform still uses the old host; the switch is a documented, reversible step (`docs/s3-state-store.md`).
+## 2026-11-15 — the Terraform state store gets a VM on c3 (`s3-prod`), switched the same day
+- New role `objstore` (`modules/node`, `cloud-init/objstore.yaml.tftpl`) and node `s3-prod` in `environments/prod/nodes.yaml`: RustFS 1.0.2, a verified copy of the state store of the desktop `s3` host (4 objects, 438 versions, identical). Terraform and the state snapshots use the VM since the switch (`docs/s3-state-store.md`, "Switched"); the old host's container stays, unused, for a week as the rollback.
 - Hourly whole-store pull to the backup box (`scripts/rustfs-vm-pull.sh`, installer, `rustfs-vm-pull.timer`), `scripts/s3-vm-restore.sh` (rehearsed with a real restore), `scripts/s3-vm-migrate.sh` (compare / final re-sync), rebuild kit and pre-migration copy on the backup box.
 - `scripts/env-vms.py` skips role `objstore` (a prod stop had taken the VM down). `scripts/s3-tfstate-backup.sh` can read its endpoint and keys from `/etc/tfstate-backup.env`.
 - Applied with `-target`: a full `plan` of `environments/prod` would have powered on all 10 stopped prod VMs.

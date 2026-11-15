@@ -6,7 +6,7 @@
 # The access keys are read from the running container's environment at run time, never stored or printed.
 set -euo pipefail
 BUCKET=terraform-state
-ENDPOINT=http://192.168.2.4:9000
+ENDPOINT=http://s3-prod.rdulinux.com:9000   # the s3-prod VM since 2026-11-15; before that http://192.168.2.4:9000 (docs/s3-state-store.md)
 DEST=/backup/terraform-state
 KEEP=300
 

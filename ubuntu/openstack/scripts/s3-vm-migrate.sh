@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Keep the s3-prod VM's RustFS identical to the old s3 host's, and say so. Run from your Mac.
-#   scripts/s3-vm-migrate.sh --check     # compare both stores object by object, version by version (read-only)
-#   scripts/s3-vm-migrate.sh             # re-copy old -> VM (the old store is stopped for the few seconds of the copy, then started again), then compare
-# The old host stays the live state store until the Terraform backends are switched (docs/s3-state-store.md, "Moving the state store to s3-prod"). Until then
-# every `terraform apply` writes to the OLD store, so run this again right before the switch, with no Terraform running anywhere.
-# Nothing is deleted: the VM's previous data is moved to /opt/rustfs/data.before-sync-<time>.
+# Keep the old s3 host's RustFS and the s3-prod VM's RustFS comparable, and say so. Run from your Mac. Each direction is explicit, so a stale copy can never
+# overwrite the live store by accident.
+#   scripts/s3-vm-migrate.sh --check        # compare both stores object by object, version by version (read-only; always safe)
+#   scripts/s3-vm-migrate.sh --old-to-vm    # BEFORE the switch only: re-copy old -> VM, then compare
+#   scripts/s3-vm-migrate.sh --vm-to-old    # ROLLBACK after the switch: copy the VM's store back to the old host, then compare
+# The store being copied FROM is stopped for the few seconds of the copy and started again; the one being copied TO keeps its previous data, moved to
+# /opt/rustfs/data.before-sync-<time> (never deleted). Run with no Terraform running anywhere. Since 2026-11-15 the VM is the live store (docs/s3-state-store.md);
+# after that, --old-to-vm would replace the live store with an older copy: it asks for ALLOW_OLD_TO_VM=1.
 set -euo pipefail
 OLD="${OLD_S3:-s3}"                       # ssh name of the old host
 OLD_URL="${OLD_URL:-http://192.168.2.4:9000}"
@@ -29,14 +31,31 @@ compare() {
   if [ "$a" = "$b" ] && [ -n "$a" ]; then echo "IDENTICAL: $(echo "$a" | wc -l) entries (objects and versions) match between $OLD_URL and $VM_URL"; return 0; fi
   echo "DIFFERENT: the stores do not match:"; diff <(echo "$a") <(echo "$b") | head -12; return 1
 }
-[ "${1:-}" = "--check" ] && { compare; exit $?; }
+mode="${1:-}"
+case "$mode" in
+  --check) compare; exit $? ;;
+  --old-to-vm) [ "${ALLOW_OLD_TO_VM:-}" = 1 ] || { echo "refusing: the VM is the live store now; --old-to-vm would replace it with the old host's copy. Set ALLOW_OLD_TO_VM=1 only if you mean it." >&2; exit 2; } ;;
+  --vm-to-old) ;;
+  *) sed -n '2,9p' "$0" | sed 's/^# \?//'; exit 2 ;;
+esac
 
 stamp=$(date +%Y%m%d-%H%M%S)
-echo "re-copying $OLD:/opt/rustfs/data -> $VM (old store stopped for the copy)"
-old 'docker stop rustfs >/dev/null 2>&1; tar -C /opt/rustfs --numeric-owner -cf - data; docker start rustfs >/dev/null 2>&1' > /tmp/rustfs-sync.$$
-vm 'docker stop rustfs >/dev/null 2>&1 || true'
-vm "[ -d /opt/rustfs/data ] && mv /opt/rustfs/data /opt/rustfs/data.before-sync-$stamp; true"
-vm 'tar -C /opt/rustfs --numeric-owner -xpf -' < /tmp/rustfs-sync.$$; rm -f /tmp/rustfs-sync.$$
-vm 'docker start rustfs >/dev/null'
-for i in $(seq 1 20); do [ "$(curl -s -o /dev/null -w %{http_code} "$VM_URL/health")" = 200 ] && break; sleep 2; done
+tmp=/tmp/rustfs-sync.$$
+if [ "$mode" = "--old-to-vm" ]; then
+  echo "re-copying $OLD:/opt/rustfs/data -> $VM (the old store is stopped for the copy)"
+  old 'docker stop rustfs >/dev/null 2>&1; tar -C /opt/rustfs --numeric-owner -cf - data; docker start rustfs >/dev/null 2>&1' > "$tmp"
+  vm 'docker stop rustfs >/dev/null 2>&1 || true'
+  vm "[ -d /opt/rustfs/data ] && mv /opt/rustfs/data /opt/rustfs/data.before-sync-$stamp; true"
+  vm 'tar -C /opt/rustfs --numeric-owner -xpf -' < "$tmp"
+  vm 'docker start rustfs >/dev/null'
+else
+  echo "ROLLBACK: copying $VM:/opt/rustfs/data -> $OLD (the VM's store is stopped for the copy)"
+  vm 'docker stop rustfs >/dev/null 2>&1; tar -C /opt/rustfs --numeric-owner -cf - data; docker start rustfs >/dev/null 2>&1' > "$tmp"
+  old 'docker stop rustfs >/dev/null 2>&1 || true'
+  old "[ -d /opt/rustfs/data ] && mv /opt/rustfs/data /opt/rustfs/data.before-sync-$stamp; true"
+  old 'tar -C /opt/rustfs --numeric-owner -xpf -' < "$tmp"
+  old 'docker start rustfs >/dev/null'
+fi
+rm -f "$tmp"
+for i in $(seq 1 20); do [ "$(curl -s -o /dev/null -w %{http_code} "$VM_URL/health")" = 200 ] && [ "$(curl -s -o /dev/null -w %{http_code} "$OLD_URL/health")" = 200 ] && break; sleep 2; done
 compare
