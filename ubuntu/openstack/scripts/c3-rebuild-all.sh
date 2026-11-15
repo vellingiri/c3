@@ -369,15 +369,18 @@ stage_s3() {
   stage s3 "the s3 host: RustFS (Terraform states), state and router backups"
   if ! rssh root@192.168.2.4 true 2>/dev/null; then warn "cannot ssh to root@192.168.2.4 (s3)"; return; fi
   ok "ssh to s3 works"
-  rssh root@192.168.2.4 'docker ps --format "{{.Names}} {{.Status}}" | grep -q "^rustfs "' && ok "RustFS container is running on s3" || drift "RustFS container is not running on s3 (/opt/rustfs/recreate-rustfs.sh)"
-  [ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://192.168.2.4:9000/health)" = 200 ] && ok "RustFS health 200" || drift "RustFS health is not 200"
-  local t; for t in tfstate-backup.timer openwrt-backup.timer; do
+  # RustFS (the Terraform state store) runs on the s3-prod VM since 2026-11-15; this host keeps the backups and the timers (docs/s3-state-store.md)
+  rssh root@s3-prod.rdulinux.com 'docker ps --format "{{.Names}} {{.Status}}" | grep -q "^rustfs "' && ok "RustFS container is running on s3-prod" || drift "RustFS container is not running on s3-prod (scripts/s3-vm-restore.sh)"
+  [ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://s3-prod.rdulinux.com:9000/health)" = 200 ] && ok "RustFS health 200" || drift "RustFS health is not 200"
+  local t; for t in tfstate-backup.timer rustfs-vm-pull.timer openwrt-backup.timer; do
     if rssh root@192.168.2.4 "systemctl is-active $t" | grep -q '^active$'; then ok "s3 timer $t is active"
-    else drift "s3 timer $t is not active"; act "install on s3" "$REPO/scripts/install-s3-$([ $t = tfstate-backup.timer ] && echo tfstate || echo openwrt)-backup.sh"; fi; done
+    else drift "s3 timer $t is not active"; act "install on s3" "$REPO/scripts/install-$(case $t in tfstate-backup.timer) echo s3-tfstate-backup;; rustfs-vm-pull.timer) echo rustfs-vm-pull;; *) echo s3-openwrt-backup;; esac).sh"; fi; done
   local age; age=$(rssh root@192.168.2.4 'echo $(( ($(date +%s) - $(stat -c %Y /backup/terraform-state/last-ok)) / 60 ))' 2>/dev/null)
   [ -n "$age" ] && { [ "$age" -lt 150 ] && ok "state snapshot job ran $age min ago" || drift "state snapshot job last ran $age min ago (should be under 2 hours)"; }
   age=$(rssh root@192.168.2.4 'echo $(( ($(date +%s) - $(stat -c %Y /backup/openwrt/last-ok)) / 3600 ))' 2>/dev/null)
   [ -n "$age" ] && { [ "$age" -lt 50 ] && ok "router backup job ran $age h ago" || drift "router backup job last ran $age h ago (should be under 2 days)"; }
+  age=$(rssh root@192.168.2.4 'echo $(( ($(date +%s) - $(stat -c %Y /backup/rustfs-vm/last-ok)) / 60 ))' 2>/dev/null)
+  [ -n "$age" ] && { [ "$age" -lt 150 ] && ok "whole-store pull of s3-prod ran $age min ago" || drift "whole-store pull of s3-prod last ran $age min ago (should be under 2 hours)"; }
   info "free space on s3: $(rssh root@192.168.2.4 'df -h /backup | tail -1 | awk "{print \$4\" free of \"\$2}"')"
 }
 

@@ -23,6 +23,7 @@ scripts/env-vms.py prod start                    # brings the amphorae back too 
 - It reaches OpenStack with `ssh c3` (admin credentials in `/root/.bashrc`), the cluster with `~/.kube/<env>` (context `<env>`) and the databases with ssh names like `db1-prod`. Set `C3_HOST` to use another name for c3.
 
 ## Good to know
+- **`s3-prod` is never stopped or started by this script** (role `objstore`, `NEVER_STOP_ROLES`). It is the Terraform state store; `status` does not list it. An older copy of the script does not know this and would stop it: update every copy.
 - **Terraform is not needed to start.** A later `terraform plan` simply sees the VMs active (it was how you started them before; both work).
 - **Downtime:** the app is down from the first tier on. For prod expect roughly 5 minutes to stop and 8 to 10 to start (databases, then the control planes, then the pods are rescheduled).
 - **Do not start a half-stopped environment by hand in the wrong order:** a worker before the databases is fine, but a database leader that is not the one stopped last can start second; `start` always brings the leader first.

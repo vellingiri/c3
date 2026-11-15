@@ -5,6 +5,10 @@
     scripts/env-vms.py prod stop  [--lbs] [--dry-run] [--confirm]
     scripts/env-vms.py prod start [--all] [--lbs] [--dry-run] [--no-cleanup]
 
+    scripts/env-vms.py prod status w1-prod            one or more named servers instead of the whole environment
+    scripts/env-vms.py prod start  w1-prod w2-prod    starts exactly those (if SHUTOFF), whatever the last `stop` saved
+    scripts/env-vms.py prod stop   w3-prod            stops exactly that one
+
 Run it from your Mac. It reaches OpenStack through `ssh c3` (the admin credentials are in /root/.bashrc there) and the cluster/database
 through your usual kubeconfig (~/.kube/<env>, context <env>) and ssh names (db1-prod ...). Nothing is installed anywhere.
 
@@ -23,6 +27,9 @@ graceful shutdown leaves and prints the checks (nodes, Patroni, the finance fron
 `stop` remembers what it stopped in ~/.cache/c3-env-vms/<env>.json, so `start` brings back exactly those VMs and not one that was off on
 purpose. Without that file, `start --all` starts every VM of the environment that is SHUTOFF.
 `--dry-run` shows the plan and changes nothing. `stop` does NOT ask for confirmation (use `--dry-run` to look first, or `--confirm` to be asked).
+With server names, only those VMs are touched (names as `status` prints them, including an amphora-... name); an unknown name stops the script before
+anything happens. They still go in the safe order among themselves, an individual `stop` adds to the saved list rather than replacing it, and an
+individual `start` waits only for the nodes that are meant to be up, not for ones you left off. Naming a server needs no --all and no earlier `stop`.
 Starting the VMs needs no Terraform: this is the OpenStack API directly (a later `terraform apply` simply sees them active).
 """
 import argparse
@@ -42,6 +49,9 @@ START_TIER_TIMEOUT = 300
 FRONT_DOOR = {"prod": "http://finance.rdulinux.com/health"}
 
 # stop order: smaller first. Start is the reverse.
+# Roles that are never stopped or started by this script, even though they carry env=<env>. The S3 server (s3-prod) is the Terraform state store: while it
+# is off, no `terraform plan` or `apply` in any stack can read or write its state, and the tfstate backups have nothing to copy.
+NEVER_STOP_ROLES = {"objstore"}
 RANK = {"runner": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
 RANK_NAME = {1: "runner", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
 # The Octavia load balancers that belong to each environment (their amphorae are the VMs `--lbs` stops and starts). Override: ENV_LBS="prod=finance-lb,argo-lb,prod-api;cka=cka-api"
@@ -97,6 +107,8 @@ def list_vms(env):
         if props.get("env") != env:
             continue
         role = props.get("role", "")
+        if role in NEVER_STOP_ROLES:
+            continue
         rank = RANK.get(role) or guess_rank(v["Name"])
         vms.append({"id": v["ID"], "name": v["Name"], "status": v["Status"], "role": role, "rank": rank, "sub": 0, "props": props})
     if INCLUDE_LBS:
@@ -161,6 +173,18 @@ def guess_rank(name):
 
 def statuses(env):
     return {v["id"]: v["status"] for v in list_vms(env)}
+
+
+def pick(vms, args, env):
+    """Narrow the environment's VMs to the servers named on the command line (all of them when none are named)."""
+    names = list(dict.fromkeys(getattr(args, "servers", None) or []))
+    if not names:
+        return vms
+    have = {v["name"]: v for v in vms}
+    unknown = [n for n in names if n not in have]
+    if unknown:
+        die("not a VM of %s: %s. Its VMs are: %s" % (env, " ".join(unknown), " ".join(sorted(have))))
+    return [have[n] for n in names]
 
 
 def wait_status(env, ids, want, timeout):
@@ -307,11 +331,11 @@ def show_plan(title, vms, reverse):
 
 
 def cmd_status(env, args):
-    vms = list_vms(env)
+    vms = pick(list_vms(env), args, env)
     if not vms:
         say("no VMs with env=%s" % env)
         return
-    say("VMs of %s:" % env)
+    say("VMs of %s%s:" % (env, " (selected)" if args.servers else ""))
     for v in sorted(vms, key=lambda x: (x["rank"], x["name"])):
         say("  %-12s %-9s %s" % (v["name"], v["status"], v["role"]))
     st = load_state(env)
@@ -329,7 +353,7 @@ def cmd_status(env, args):
 
 
 def cmd_stop(env, args):
-    vms = list_vms(env)
+    vms = pick(list_vms(env), args, env)
     if not vms:
         die("no VMs with env=%s found" % env)
     running = [v for v in vms if v["status"] == "ACTIVE"]
@@ -375,12 +399,21 @@ def cmd_stop(env, args):
 
 
 def cmd_start(env, args):
-    vms = list_vms(env)
-    if not vms:
+    everything = list_vms(env)
+    if not everything:
         die("no VMs with env=%s found" % env)
-    by_id = {v["id"]: v for v in vms}
+    vms = pick(everything, args, env)                 # the named servers, or all of them
     st = load_state(env)
-    if args.all:
+    if args.servers:
+        # Naming a server is the instruction: start it if it is off, whatever the last `stop` saved. Its tier position (database leader,
+        # standby) comes from the saved list when it has one.
+        saved = {s_["id"]: s_ for s_ in (st or {}).get("vms", [])}
+        todo = []
+        for v in vms:
+            if v["status"] == "SHUTOFF":
+                v["sub"] = int(saved[v["id"]].get("sub", 0)) if v["id"] in saved else int(v.get("props", {}).get("maint_sub", 0) or 0)
+                todo.append(v)
+    elif args.all:
         todo = [v for v in vms if v["status"] == "SHUTOFF" and (v["rank"] != 6 or INCLUDE_LBS_FLAG)]
     else:
         todo = []
@@ -405,7 +438,7 @@ def cmd_start(env, args):
     if args.dry_run:
         say("(dry run: nothing started)")
         return
-    all_vms = vms
+    all_vms = everything                              # the checks (Patroni, nodes) look at the whole environment, not only the selection
     plan = tiers(todo, reverse=True)
     for i, ((rank, sub), group) in enumerate(plan):
         names = " ".join(v["name"] for v in group)
@@ -429,7 +462,9 @@ def cmd_start(env, args):
             say("   waiting for the Kubernetes API ...")
             say("   API: " + ("ok" if wait_api(env) else "NOT answering yet (continuing; check the control planes)"))
     # end of start: nodes, cleanup, checks
-    workers_cp = [v for v in vms if v["rank"] in (2, 3)]
+    # Only the nodes that are meant to be up: running now, or started just now. One left off on purpose is not waited for.
+    meant_up = {v["id"] for v in everything if v["status"] == "ACTIVE"} | {v["id"] for v in todo}
+    workers_cp = [v for v in everything if v["rank"] in (2, 3) and v["id"] in meant_up]
     if workers_cp:
         say("\n== waiting for every node Ready ...")
         ok = wait_nodes(env, len(workers_cp))
@@ -452,7 +487,19 @@ def cmd_start(env, args):
         rc, out = run(["curl", "-s", "-o", "/dev/null", "-m", "8", "-w", "%{http_code}", FRONT_DOOR[env]], 15)
         say("front door %s: %s" % (FRONT_DOOR[env], out.strip() or "no answer yet"))
     unmark_stopped(todo)
-    if st:
+    if st and args.servers:
+        # Some of the saved VMs may still be off: keep the list, minus the ones just started.
+        left = [s_ for s_ in st.get("vms", []) if s_["id"] not in {v["id"] for v in todo}]
+        try:
+            if left:
+                st["vms"] = left
+                with open(state_path(env), "w") as f:
+                    json.dump(st, f, indent=1)
+            else:
+                os.replace(state_path(env), state_path(env) + ".last")
+        except OSError:
+            pass
+    elif st:
         try:
             os.replace(state_path(env), state_path(env) + ".last")
         except OSError:
@@ -464,6 +511,7 @@ def main():
     ap = argparse.ArgumentParser(description="Stop, start or show all the VMs of one environment in a safe order.")
     ap.add_argument("env", help="prod | cka | qa")
     ap.add_argument("command", choices=["stop", "start", "status"])
+    ap.add_argument("servers", nargs="*", metavar="server", help="only these VMs, by name as `status` prints them (default: the whole environment)")
     ap.add_argument("--confirm", action="store_true", help="stop: ask for the environment name first (by default it does not ask)")
     ap.add_argument("--yes", action="store_true", help=argparse.SUPPRESS)   # old option, now the default; accepted and ignored
     ap.add_argument("--dry-run", action="store_true", help="show the plan only")
@@ -476,7 +524,7 @@ def main():
     args = ap.parse_args(argv)
     global INCLUDE_LBS, INCLUDE_LBS_FLAG
     INCLUDE_LBS_FLAG = args.lbs
-    INCLUDE_LBS = args.lbs or args.command in ("start", "status")     # start finds amphorae that `stop --lbs` marked; status shows them
+    INCLUDE_LBS = args.lbs or args.command in ("start", "status") or bool(args.servers)   # start finds amphorae that `stop --lbs` marked; status shows them; a named amphora must be findable
     {"stop": cmd_stop, "start": cmd_start, "status": cmd_status}[args.command](args.env, args)
 
 

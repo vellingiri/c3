@@ -1,0 +1,24 @@
+#cloud-config
+# The S3 object store (RustFS) that holds every Terraform state (docs/s3-state-store.md).
+# This part only prepares the machine: Docker, and the folders. The RustFS image and the data are brought over by
+# scripts/s3-vm-migrate.sh, so the VM runs exactly the version (1.0.2) and the bucket the old s3 host ran, not whatever `latest` is today.
+# The keys are never in cloud-init (it is readable from the metadata service).
+# A fresh image's package lists are stale: without this the install below fails with "Unable to locate package" (found on the first build, 2026-11-15).
+package_update: true
+packages:
+  - docker.io
+  - rsync
+  - curl
+  - python3
+
+write_files:
+  - path: /usr/local/sbin/s3-vm-ready
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # prints OK when this VM is ready to receive RustFS
+      systemctl is-active --quiet docker && [ -d /opt/rustfs/data ] && echo OK
+runcmd:
+  - mkdir -p /opt/rustfs/data /var/backups/rustfs
+  - chmod 700 /opt/rustfs /var/backups/rustfs
+  - systemctl enable --now docker
