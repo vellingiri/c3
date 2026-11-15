@@ -1,0 +1,28 @@
+# Stopping and starting all the VMs of one environment (maintenance window)
+
+`scripts/env-vms.py` brings every VM of **one environment** (`prod`, `cka`, `qa`) down in a safe order and back up again, from your Mac, with no Terraform. Written 2026-11-15.
+
+```bash
+scripts/env-vms.py status prod                    # VMs and their state, Kubernetes nodes Ready, Patroni roles
+scripts/env-vms.py stop   prod --dry-run          # the plan, nothing changes
+scripts/env-vms.py stop   prod                    # asks you to type "prod"; --yes skips the question
+scripts/env-vms.py start  prod                    # brings back exactly what the last stop stopped
+scripts/env-vms.py start  prod --all              # every VM of the environment that is SHUTOFF (no saved list needed)
+```
+
+## How it picks the VMs and the order
+- **Which VMs:** those whose Nova metadata says `env=<env>` (Terraform sets `env` and `role` on every node). The Octavia amphorae have no `env`, so **the load balancers are never touched**; they just mark their members down while the VMs are off.
+- **Stop order** (a graceful ACPI shutdown; Nova forces the power-off after its own timeout; the kubelet's graceful-shutdown setting stops the pods first), each tier waited for until every VM is `SHUTOFF`:
+  1. the GitHub runner (`ci1-prod`), 2. the workers, 3. the control planes, 4. the databases: the **Patroni standby first, the leader last** (it asks Patroni who the leader is), 5. the witness (`dbw1-prod`, an etcd member).
+- **Start order** is the exact reverse: witness, database **leader**, standby, control planes, workers, runner. It also waits for what the next step needs: a Patroni leader before the control planes, the API server before the workers, then every node Ready.
+- At the end of a start it deletes the `Error` / `ContainerStatusUnknown` pod records a graceful shutdown leaves (`kubectl delete pod -A --field-selector=status.phase=Failed`; `--no-cleanup` skips it) and prints the checks: nodes, Patroni, and for prod the finance front door.
+- **What was stopped is remembered** in `~/.cache/c3-env-vms/<env>.json` (mode 600), so a VM that was off on purpose is not started by `start`. Running `stop` twice merges the lists. After a successful `start` the file is renamed `<env>.json.last`.
+- It reaches OpenStack with `ssh c3` (admin credentials in `/root/.bashrc`), the cluster with `~/.kube/<env>` (context `<env>`) and the databases with ssh names like `db1-prod`. Set `C3_HOST` to use another name for c3.
+
+## Good to know
+- **Terraform is not needed to start.** A later `terraform plan` simply sees the VMs active (it was how you started them before; both work).
+- **Downtime:** the app is down from the first tier on. For prod expect roughly 5 minutes to stop and 8 to 10 to start (databases, then the control planes, then the pods are rescheduled).
+- **Do not start a half-stopped environment by hand in the wrong order:** a worker before the databases is fine, but a database leader that is not the one stopped last can start second; `start` always brings the leader first.
+- **A VM that does not stop** within 6 minutes makes the script stop and name it; nothing further is stopped, and `start` still brings back what was stopped.
+- **Not covered:** c3 itself (use `scripts/c3-vms-stop.sh` / `c3-vms-start.sh` for the whole host: those stop every VM on c3 including the amphorae, with the Octavia health manager handled), the `s3` host, the router.
+- **Tested:** `status`, `stop --dry-run`, `start --dry-run` and `start --all --dry-run` against prod and cka on 2026-11-15, plus the error cases (unknown environment, no saved list). A live stop and start was **not** exercised in this first version; do a first run on cka before relying on it for prod.
