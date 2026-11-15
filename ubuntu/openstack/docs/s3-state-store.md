@@ -2,7 +2,7 @@
 
 > **2026-11-15:** the live store moved to the `s3-prod` VM (`s3-prod.rdulinux.com`, 192.168.2.99). The machine at 192.168.2.4 that used to be called `s3`
 > is **`backup`** again (`backup.rdulinux.com`): it holds the hourly state snapshots, the whole-store pull of the VM, the router backups and the DR bundles, and its
-> own old RustFS container is stopped. `s3` stays as an alias of the same address for a while. Below, "the old host" and the older sections describe that machine as it was
+> own old RustFS container is stopped. The `s3` DNS name and ssh alias were removed the same day. Below, "the old host" and the older sections describe that machine as it was
 > while it was the store.
 
 Checked and hardened 2026-10-20. The machine formerly called `backup` is now **`s3`** (`s3.rdulinux.com`, 192.168.2.4; renamed the same day, `CHANGELOG.md`). It is a separate desktop machine, not a VM on `c3`.

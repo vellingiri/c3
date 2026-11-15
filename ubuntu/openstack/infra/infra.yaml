@@ -58,7 +58,6 @@ dns:
     c3:      { ip: 192.168.2.2, ptr: true }
     repo:    { ip: 192.168.2.3, ptr: true }
     backup:  { ip: 192.168.2.4, ptr: true }   # the off-host backups (NFS /backup, state and router snapshots, the s3-prod pull). Named `s3` 2026-10-20 to 2026-11-15, while it was the Terraform state store (MinIO, then RustFS on :9000); that store is now the s3-prod VM
-    s3:      { ip: 192.168.2.4 }              # transitional alias of `backup` (no reverse record: that points at backup); drop it once nothing says `s3` any more
     # db is the service name of the CURRENT primary Postgres (db1 now, db2 after a failover); change ip to fail over.
     db:      { ip: 192.168.2.124, ttl: 60 }
     finance: { ip: 192.168.2.5, ptr: true }   # the finance app, served by finance-lb
