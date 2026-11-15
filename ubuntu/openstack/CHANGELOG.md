@@ -8,6 +8,13 @@ Update this file in the same commit as any change, and list anything done **by h
 
 
 
+## 2026-11-15: memory squeeze: database pair to 2 GB, QA `c1` to 4 GB
+
+- QA `w2` failed with `NoValidHost`: Nova's memory limit (about 95,650 MB) was 94,208 MB used. See "Capacity update" in `docs/ARCHITECTURE.md`.
+- **By hand (not in Terraform):** flavor `m1.small-2g-20g` (id c74918c8-c1b7-4a24-b587-0f2bc6ca7aaa, 2 vCPU, 2048 MB, 20 GB, public) created on c3. Flavors are not managed by Terraform.
+- `environments/qa`: `c1` replaced (it was empty) as `m1.small` 4 GB instead of `m1.medium` 8 GB. A resize failed first ("No valid host found for resize": the resize needs old and new size free together).
+- `environments/prod`: `db1-prod` then `db2-prod` resized in place to `m1.small-2g-20g`, one at a time: `db1` (standby) first, then `patronictl switchover` to `db1`, then `db2`. No failover outage beyond the switchover; Patroni healthy afterwards (leader `db1`, `db2` sync standby, lag 0, timeline 36); `terraform plan` in prod: no changes. Memory allocated 94,208 to 86,016 MB.
+
 ## 2026-11-15: recovery when the state store is lost with the cloud
 
 - New `scripts/s3-temp-store.sh` (`status`, `start`, `handback`, `stop`): a temporary RustFS on the backup host from a copy of the newest snapshot, reached by an `/etc/hosts` line for `s3-prod.rdulinux.com`, so Terraform can recreate the `s3-prod` VM that serves its own state; `handback` restores the temporary store's data into the new VM and compares the states. Runbook: `docs/c3-rebuild.md` "When the state store is gone too".

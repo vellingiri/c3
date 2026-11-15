@@ -85,6 +85,11 @@ nginx pods (3, one per node)  ->  /api -> backend (3)   /docs -> docs (3)   / ->
 - **The replication monitor** on the runner (`/usr/local/sbin/db-replication-monitor`, `/etc/default/db-monitor`, systemd timer `db-monitor.timer`), installed by `scripts/install-db-monitor.sh`. Its ntfy topic is only in that file.
 - **ssh aliases and kubeconfigs** on your Mac: `~/.ssh/config`, `~/.kube/prod`, `~/.kube/qa` (see `operations-cheatsheet.md`).
 
+## Capacity update (2026-11-15)
+The memory ratio is now **1.2** (80,142 MB x 1.2 - 512 reserved = about 95,650 MB allocatable); CPU ratio 4.0 (32 threads, 128 vCPUs), disk 2.5. **Memory is the limit**, not CPU: 94,208 MB were allocated and a QA worker failed with `NoValidHost`.
+Stopped VMs (the four `cka` ones, 16 GB) still hold their allocation. A **resize on the same host needs the old and the new flavor at once**, so a shrink also fails when less than the new size is free ("No valid host found for resize"): free memory first (we replaced QA `c1`, which was empty).
+Sizes now: `db1-prod` and `db2-prod` 2 vCPU / 2 GB (flavor `m1.small-2g-20g`, created by hand 2026-11-15 with 20 GB disk because a disk cannot shrink; Postgres uses about 400 MB), QA `c1` 4 GB (`m1.small`). Allocated afterwards: 86,016 MB.
+
 ## Capacity (as of 2026-10-20)
 The cloud is one host with 32 vCPUs and about 80 GB of memory. Nova allocates memory with a ratio of 1.1 (about 88 GB allocatable): **about 7.8 GB of allocatable memory was left**
 after `db2` and `argo-lb`. A new `m1.small` is 4 GB, an `m1.tiny` 2 GB, an amphora 2 GB. If a build fails with `NoValidHost`, check Placement before anything else

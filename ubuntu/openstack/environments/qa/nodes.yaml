@@ -22,7 +22,7 @@ defaults:
     api_endpoint: ""   # name of the cluster's API load balancer once it is HA (api.qa.rdulinux.com); empty = the first controller's floating IP
 
 nodes:
-  c1: { role: controller, flavor: m1.medium }
+  c1: { role: controller, flavor: m1.small }
   w1: { role: worker, flavor: m1.small }
   w2: { role: worker, flavor: m1.small }
   #w3: { role: worker, flavor: m1.small }
