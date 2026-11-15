@@ -8,6 +8,12 @@ Update this file in the same commit as any change, and list anything done **by h
 
 
 
+## 2026-11-15: recovery when the state store is lost with the cloud
+
+- New `scripts/s3-temp-store.sh` (`status`, `start`, `handback`, `stop`): a temporary RustFS on the backup host from a copy of the newest snapshot, reached by an `/etc/hosts` line for `s3-prod.rdulinux.com`, so Terraform can recreate the `s3-prod` VM that serves its own state; `handback` restores the temporary store's data into the new VM and compares the states. Runbook: `docs/c3-rebuild.md` "When the state store is gone too".
+- `c3-rebuild-all.sh`: the `backup-host` stage checks the recovery kit; the terraform stages warn when the hosts override is active.
+- **Fix:** `s3-vm-restore.sh` and `install-s3-openwrt-backup.sh` defaulted to the host `s3`, which no longer resolves; they now use `backup`. Not rehearsed end to end yet.
+
 ## 2026-11-15: `c3-rebuild-all.sh` validates its arguments and needs a mode
 
 - Run with no arguments from the Mac it created its log directory first and then failed with "cannot create /var/log/c3-rebuild". It now validates the command line and the machine **before** anything is created:

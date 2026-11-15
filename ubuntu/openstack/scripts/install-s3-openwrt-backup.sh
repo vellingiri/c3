@@ -4,7 +4,7 @@
 # 2. the script as /usr/local/sbin/openwrt-backup, service + timer (daily 03:15, Persistent so a missed run happens at boot),
 # 3. one run now. Nothing on c3, nothing else on the router.
 set -euo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"; ROUTER=${ROUTER:-root@192.168.2.1}; S3=${S3:-s3}
+HERE="$(cd "$(dirname "$0")" && pwd)"; ROUTER=${ROUTER:-root@192.168.2.1}; S3=${S3:-backup}
 ssh "$S3" '[ -f /root/.ssh/openwrt_backup ] || ssh-keygen -q -t ed25519 -N "" -C "s3-openwrt-backup" -f /root/.ssh/openwrt_backup; chmod 600 /root/.ssh/openwrt_backup'
 PUB=$(ssh "$S3" 'cat /root/.ssh/openwrt_backup.pub')
 ssh "$ROUTER" "grep -qF '$PUB' /etc/dropbear/authorized_keys || echo '$PUB' >> /etc/dropbear/authorized_keys; chmod 600 /etc/dropbear/authorized_keys; wc -l < /etc/dropbear/authorized_keys"

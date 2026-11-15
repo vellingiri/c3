@@ -34,6 +34,9 @@ Everything on the host that was changed has a backup next to it (`/root/hosts.ba
 3. No state at all for an environment: the VMs and networks still exist; `terraform import` each (`scripts/adopt-node.sh` was written for that) - last resort, hours of work.
 Check any time: `ssh backup 'ls -l /backup/terraform-state/last-ok /backup/terraform-state/latest'` (should be less than an hour old) and `ssh c3 'ls /root/backups/terraform-state | tail -2'`.
 
+## If the store itself is lost with the cloud
+The store is on the `s3-prod` VM, inside the cloud it describes. Recovery uses a temporary RustFS on the backup host, started with `scripts/s3-temp-store.sh` and reached by an `/etc/hosts` line for `s3-prod.rdulinux.com`; the whole procedure is in `docs/c3-rebuild.md`, "When the state store is gone too". `scripts/s3-vm-restore.sh` and `install-s3-openwrt-backup.sh` now default to the host `backup` (the old name `s3` no longer resolves).
+
 ## Terraform lock trap
 A killed or interrupted `terraform plan` leaves a lock (`terraform.tfstate.tflock`): "Error acquiring the state lock ... PreconditionFailed". If no Terraform is running anywhere, `terraform force-unlock <ID from the message>` (seen 2026-10-20).
 

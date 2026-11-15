@@ -347,6 +347,7 @@ tf_stage() {   # tf_stage NAME DIR
   stage "$name" "terraform in $dir (dry run = plan without a lock, nothing is written)"
   [ -d "$d" ] || { skip "no $d (--tf-repo)"; return; }
   command -v terraform >/dev/null 2>&1 || { skip "terraform is not installed"; return; }
+  grep -Eq '^[^#]*[[:space:]]s3-prod\.rdulinux\.com' /etc/hosts 2>/dev/null && warn "/etc/hosts overrides s3-prod.rdulinux.com: Terraform here uses a TEMPORARY state store (scripts/s3-temp-store.sh status)"
   is_git "$TF_REPO" || info "no git metadata in $TF_REPO: newest file in $dir is from $(ls -t "$d"/*.tf "$d"/nodes.yaml 2>/dev/null | head -1 | xargs -r stat -c %y | cut -c1-10); a plan from an old copy can show changes that are not real (run Terraform from the Mac, or sync the repo first)"
   if [ "$dir" = environments/prod ] && [ ! -e "$d/secrets.auto.tfvars" ]; then
     skip "$dir needs $d/secrets.auto.tfvars (git-ignored; scripts/db-ha-secrets.sh makes it from the live Patroni config): not planning (terraform would ask for the database password)"; return; fi
@@ -425,6 +426,15 @@ stage_backup_host() {
   [ -n "$age" ] && { [ "$age" -lt 50 ] && ok "router backup job ran $age h ago" || drift "router backup job last ran $age h ago (should be under 2 days)"; }
   age=$(rssh root@192.168.2.4 'echo $(( ($(date +%s) - $(stat -c %Y /backup/rustfs-vm/last-ok)) / 60 ))' 2>/dev/null)
   [ -n "$age" ] && { [ "$age" -lt 150 ] && ok "whole-store pull of s3-prod ran $age min ago" || drift "whole-store pull of s3-prod last ran $age min ago (should be under 2 hours)"; }
+  # The recovery kit for "the state store is gone too" (scripts/s3-temp-store.sh, docs/c3-rebuild.md): everything a temporary RustFS on this host needs
+  local kit; kit=$(rssh root@192.168.2.4 'L=$(readlink /backup/rustfs-vm/latest 2>/dev/null); [ -n "$L" ] && [ -d "/backup/rustfs-vm/$L/terraform-state" ] && echo snap=$L; cd /backup/rustfs-vm-config 2>/dev/null && [ -s rustfs-1.0.2-image.tar ] && sha256sum -c --quiet rustfs-1.0.2-image.tar.sha256 2>/dev/null && echo image; [ -s /backup/rustfs-vm-config/rustfs.env ] && echo env; command -v docker >/dev/null && echo docker; ss -tln | grep -q "192.168.2.4:9000 " && echo portbusy; [ -e /opt/rustfs-temp/data ] && echo oldtemp' 2>/dev/null)
+  case "$kit" in *snap=*) ok "recovery kit: newest whole-store snapshot has terraform-state ($(echo "$kit" | sed -n 's/^snap=//p'))" ;; *) drift "recovery kit: no usable /backup/rustfs-vm/latest with terraform-state (the hourly pull: rustfs-vm-pull.timer)" ;; esac
+  case "$kit" in *image*) ok "recovery kit: RustFS image tarball present and its checksum matches" ;; *) drift "recovery kit: /backup/rustfs-vm-config/rustfs-1.0.2-image.tar missing or checksum wrong" ;; esac
+  case "$kit" in *env*) ok "recovery kit: rustfs.env (the store's keys) present" ;; *) drift "recovery kit: /backup/rustfs-vm-config/rustfs.env missing" ;; esac
+  case "$kit" in *docker*) ok "recovery kit: docker is installed on the backup host" ;; *) drift "recovery kit: docker is not installed on the backup host (a temporary RustFS needs it)" ;; esac
+  case "$kit" in *portbusy*) info "192.168.2.4:9000 is in use on the backup host (a temporary store running? scripts/s3-temp-store.sh status)" ;; *) ok "192.168.2.4:9000 is free for a temporary store" ;; esac
+  case "$kit" in *oldtemp*) warn "/opt/rustfs-temp/data exists on the backup host: an earlier temporary store (look at it before the next start)" ;; esac
+  [ -x "$REPO/scripts/s3-temp-store.sh" ] && ok "scripts/s3-temp-store.sh is present" || drift "scripts/s3-temp-store.sh is missing or not executable"
   info "free space on backup: $(rssh root@192.168.2.4 'df -h /backup | tail -1 | awk "{print \$4\" free of \"\$2}"')"
 }
 

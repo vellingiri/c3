@@ -9,7 +9,7 @@
 # the keys; root-only). Afterwards `terraform plan` in infra and every environment must show no changes (docs/s3-state-store.md).
 set -euo pipefail
 VM="${S3_VM:-root@s3-prod.rdulinux.com}"
-BOX="${BACKUP_BOX:-s3}"
+BOX="${BACKUP_BOX:-backup}"
 SNAPS=/backup/rustfs-vm
 CFG=/backup/rustfs-vm-config
 SSHV=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
