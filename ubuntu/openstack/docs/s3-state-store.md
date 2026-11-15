@@ -1,4 +1,9 @@
-# The `s3` host: RustFS, where every Terraform state lives
+# The Terraform state store: RustFS on the `s3-prod` VM (and the `backup` host that keeps its copies)
+
+> **2026-11-15:** the live store moved to the `s3-prod` VM (`s3-prod.rdulinux.com`, 192.168.2.99). The machine at 192.168.2.4 that used to be called `s3`
+> is **`backup`** again (`backup.rdulinux.com`): it holds the hourly state snapshots, the whole-store pull of the VM, the router backups and the DR bundles, and its
+> own old RustFS container is stopped. `s3` stays as an alias of the same address for a while. Below, "the old host" and the older sections describe that machine as it was
+> while it was the store.
 
 Checked and hardened 2026-10-20. The machine formerly called `backup` is now **`s3`** (`s3.rdulinux.com`, 192.168.2.4; renamed the same day, `CHANGELOG.md`). It is a separate desktop machine, not a VM on `c3`.
 
@@ -27,7 +32,7 @@ Everything on the host that was changed has a backup next to it (`/root/hosts.ba
 1. A bad write (wrong state): the bucket is versioned. List versions and fetch an older one with any S3 client, for example `aws --endpoint-url http://192.168.2.4:9000 s3api list-object-versions --bucket terraform-state --prefix openstack/prod/nodes/terraform.tfstate` then `get-object --version-id ...`, and put it back (`terraform state push` for a state, or `aws s3 cp`). Take a copy of the current one first.
 2. The bucket is gone (disk failure): re-create RustFS (`/opt/rustfs/recreate-rustfs.sh` on a new host with the same keys, or build a new container), create the bucket `terraform-state`, **enable versioning**, and upload the newest snapshots (`/backup/terraform-state/latest/...` on `s3`, or `c3:/root/backups/terraform-state/latest/...`) to the same keys: `aws --endpoint-url http://192.168.2.4:9000 s3 sync /backup/terraform-state/latest/ s3://terraform-state/`. Then `terraform plan` in `infra` and each environment must show no changes.
 3. No state at all for an environment: the VMs and networks still exist; `terraform import` each (`scripts/adopt-node.sh` was written for that) - last resort, hours of work.
-Check any time: `ssh s3 'ls -l /backup/terraform-state/last-ok /backup/terraform-state/latest'` (should be less than an hour old) and `ssh c3 'ls /root/backups/terraform-state | tail -2'`.
+Check any time: `ssh backup 'ls -l /backup/terraform-state/last-ok /backup/terraform-state/latest'` (should be less than an hour old) and `ssh c3 'ls /root/backups/terraform-state | tail -2'`.
 
 ## Terraform lock trap
 A killed or interrupted `terraform plan` leaves a lock (`terraform.tfstate.tflock`): "Error acquiring the state lock ... PreconditionFailed". If no Terraform is running anywhere, `terraform force-unlock <ID from the message>` (seen 2026-10-20).

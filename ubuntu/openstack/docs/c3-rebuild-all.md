@@ -1,6 +1,6 @@
 # `c3-rebuild-all.sh`: one script for the whole of c3, and the audit of 2026-11-15
 
-`scripts/c3-rebuild-all.sh` audits `c3` or builds it from nothing, in the order of `docs/c3-rebuild.md`, with a **dry run by default** and a log of every step. It does not replace the pieces that already existed (`scripts/c3-dr/c3-dr-install.sh`, `c3-dr-post.sh`, `c3-dr-capture.sh`, the Terraform folders, `k8s/bootstrap.sh`); it **runs them in the right order, checks each result, and adds everything that was changed since they were written** (settings, timers, flavors, the disk layout, the s3 and router backups). Written 2026-11-15.
+`scripts/c3-rebuild-all.sh` audits `c3` or builds it from nothing, in the order of `docs/c3-rebuild.md`, with a **dry run by default** and a log of every step. It does not replace the pieces that already existed (`scripts/c3-dr/c3-dr-install.sh`, `c3-dr-post.sh`, `c3-dr-capture.sh`, the Terraform folders, `k8s/bootstrap.sh`); it **runs them in the right order, checks each result, and adds everything that was changed since they were written** (settings, timers, flavors, the disk layout, the backup and router backups). Written 2026-11-15.
 
 ## How to run it
 On c3, as root, from a checkout of this repository (on c3 today: `/nfsshare/c3/ubuntu/openstack`, a plain copy):
@@ -22,8 +22,8 @@ Options: `--tf-repo DIR` (where the Terraform code and `secrets.auto.tfvars` are
 | `tf-infra`, `tf-prod`, `tf-cka` | `terraform plan -lock=false` (nothing written, no lock); only resource lines kept in the log | `terraform apply` (twice if the first stops on an address conflict) |
 | `octavia`, `api-lbs`, `app-lbs` | amp security group and network ids in `octavia.conf`, the four load balancers and their floating IPs | `c3-dr-post.sh octavia / api-lbs / app-lbs` |
 | `apps` | `k8s/bootstrap.sh --check` (needs `--finance-repo` and `~/.kube/prod`) | `k8s/bootstrap.sh` |
-| `s3` | RustFS up, both backup timers, age of the last runs, free space | installs the timers if missing |
-| `router` | DHCP pool, timezone, rebind domain (needs a key for `root@192.168.2.1`) | restore from s3 only with `--restore-router` (reboots the router) |
+| `backup-host` | the backup timers, age of the last runs, free space (the stage was `backup` until 2026-11-15; `--only backup` still works) | installs the timers if missing |
+| `router` | DHCP pool, timezone, rebind domain (needs a key for `root@192.168.2.1`) | restore from backup only with `--restore-router` (reboots the router) |
 | `backups` | state pull to c3, a capture bundle exists, the capture timer | the capture timer with `--install-capture` |
 | `verify` | services, Nova, VMs per environment, load balancers, front doors, kernel oops since boot | nothing |
 
@@ -43,10 +43,10 @@ Evidence: `docs/logs/c3-rebuild-all-dry-run-2026-11-15.log` (100 checks OK, 4 DR
 | Settings changed since the install | all present and equal to the target (nova ratios 1.2 / 2.5, resize on the same host, resume guests, Octavia heartbeat 300, libvirt-guests, both drop-ins, OVN encap/mappings, exports, Samba) |
 | OpenStack objects | 8 flavors (4 `m1.*`, private `m1.octavia`, `k8s.worker`, `m1.small-20g`, `m1.medium-20g`); Octavia profile `active-standby` / flavor `ha`; 4 load balancers (floating IPs .5 .113 .61 .75 attached); 18 floating IPs; 5 DNS zones, 25 records; 14 VMs (10 prod, 4 cka), **all SHUTOFF** at the time (a maintenance stop) |
 | Local software | timers `ovn-vip-binding`, `k8s-api-lb`, `tfstate-pull` enabled and running; reconcilers in `/usr/local/sbin`; root crontab with the four website-data pulls |
-| Backups | state snapshots on s3 (job ran 33 min before) and pulled to c3; router backup 9 h before; free space on s3 747 GB |
+| Backups | state snapshots on backup (job ran 33 min before) and pulled to c3; router backup 9 h before; free space on backup 747 GB |
 
 ### Findings
-1. **No capture bundle exists and the nightly capture is not installed (the real gap).** `/root/dr-staging` does not exist and `s3:/backup/c3-dr` has no bundle. Everything in `c3-dr-install.sh` restores from a bundle, so **c3 cannot be rebuilt today**, only audited. Fix: `./c3-rebuild-all.sh --only backups --apply --install-capture` (adds a timer on c3; asked for by the owner earlier but deliberately not installed on 2026-10-22).
+1. **No capture bundle exists and the nightly capture is not installed (the real gap).** `/root/dr-staging` does not exist and `backup:/backup/c3-dr` has no bundle. Everything in `c3-dr-install.sh` restores from a bundle, so **c3 cannot be rebuilt today**, only audited. Fix: `./c3-rebuild-all.sh --only backups --apply --install-capture` (adds a timer on c3; asked for by the owner earlier but deliberately not installed on 2026-10-22).
 2. **A bug in the DR kit, fixed:** `c3-dr-post.sh` and the installer read the admin credentials with `grep '^export OS_' /root/.bashrc`, which finds nothing (they are in `/etc/keystonerc`, which `.bashrc` only sources). Your shell hid it because the variables were already set; in a clean environment the post-install steps would have failed with "missing auth-url". Both scripts now source `/etc/keystonerc`.
 3. **Installer drift, fixed:** the installer installed `chrony`; the live host uses `systemd-timesyncd` (chrony would replace it). The package list now says `systemd-timesyncd`.
 4. `crudini` is not installed on the live c3 (the installer lists it; the new script installs it before editing a config file under `--apply`).

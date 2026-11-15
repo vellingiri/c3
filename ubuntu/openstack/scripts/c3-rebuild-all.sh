@@ -13,14 +13,14 @@
 #   --finance-repo DIR  the finance app repo (for the `apps` stage)           --nova-dev DEV  an already formatted partition to mount at /var/lib/nova
 #   --reinstall       let `platform` run the installer even though OpenStack is already there (overwrites configuration!)
 #   --offline-cpus    keep CPUs 8-9 offline at boot (c3-offline-cpus.service; docs/c3-hardware-instability.md)
-#   --install-capture install the nightly c3 capture timer (not installed today)        --restore-router  restore the router config from s3 (reboots the router)
+#   --install-capture install the nightly c3 capture timer (not installed today)        --restore-router  restore the router config from the backup host (reboots the router)
 #   --log-dir DIR     logs (default /var/log/c3-rebuild)
 #
-# Stages, in order:  preflight  layout  platform  tuning  tf-infra  octavia  api-lbs  tf-prod  tf-cka  app-lbs  apps  s3  router  backups  verify
+# Stages, in order:  preflight  layout  platform  tuning  tf-infra  octavia  api-lbs  tf-prod  tf-cka  app-lbs  apps  backup-host  router  backups  verify
 #   preflight  the machine and what the run needs (hardware, network, tools, bundle)     layout   disks and mounts (/var/lib/nova, /share, /nfsshare), kernels, time
 #   platform   OpenStack itself: services, databases, endpoints, images (c3-dr-install.sh on a blank host)    tuning   every setting we changed since the install
 #   tf-*       terraform in infra/, environments/prod, environments/cka (dry run = `plan -lock=false`)       octavia / api-lbs / app-lbs   c3-dr-post.sh
-#   apps       the finance app layer in Kubernetes (k8s/bootstrap.sh)      s3   the s3 host (RustFS, state and router backups)     router   the OpenWrt router
+#   apps       the finance app layer in Kubernetes (k8s/bootstrap.sh)      backup-host   the backup host (state, router and DR backups; formerly `s3`)     router   the OpenWrt router
 #   backups    what keeps the lab recoverable (state pull, DR capture)      verify   a last look at everything
 # Logging: every line goes to the screen AND to LOG_DIR/c3-rebuild-<mode>-<time>.log, with the time; LOG_DIR/....summary.tsv has one line per check;
 # terraform plan output is kept (without values) next to it. Exit code: 0 = no failed step, 1 = at least one FAIL.
@@ -31,7 +31,7 @@ set -uo pipefail
 SELF=$(readlink -f "${BASH_SOURCE[0]:-$0}" 2>/dev/null || echo "$0")
 MODE=dry; BUNDLE=""; ONLY=""; FROM=""; SKIP=""; YES=0; KEEP_GOING=0; REPO=""; TF_REPO=""; FINANCE_REPO=""; NOVA_DEV=""
 REINSTALL=0; OFFLINE_CPUS=0; INSTALL_CAPTURE=0; RESTORE_ROUTER=0; LOG_DIR=/var/log/c3-rebuild
-STAGES="preflight layout platform tuning tf-infra octavia api-lbs tf-prod tf-cka app-lbs apps s3 router backups verify"
+STAGES="preflight layout platform tuning tf-infra octavia api-lbs tf-prod tf-cka app-lbs apps backup-host router backups verify"
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) MODE=dry ;; --apply) MODE=apply ;; --yes) YES=1 ;; --keep-going) KEEP_GOING=1 ;;
@@ -163,14 +163,14 @@ stage_preflight() {
   local nic; for nic in "${NIC_LAN:-enp3s0}" "${NIC_EXT:-enp4s0}"; do if ip link show "$nic" >/dev/null 2>&1; then ok "network interface $nic exists"; else warn "network interface $nic not found (set NIC_LAN / NIC_EXT)"; fi; done
   local bios mc; bios=$(dmidecode -s bios-version 2>/dev/null); mc=$(grep -m1 microcode /proc/cpuinfo | awk '{print $3}')
   if [ "$bios" = "A.C0" ]; then ok "BIOS $bios (MSI 7E25vAC), microcode $mc"; else warn "BIOS is '${bios:-?}'; the lab runs MSI 7E25vAC (A.C0). In the BIOS: Intel default settings, Wi-Fi off, no XMP/EXPO, VT-x and VT-d on"; fi
-  local h n; for h in "repo 192.168.2.3" "s3 192.168.2.4" "router 192.168.2.1"; do set -- $h
+  local h n; for h in "repo 192.168.2.3" "backup 192.168.2.4" "router 192.168.2.1"; do set -- $h
     if ping -c1 -W2 "$2" >/dev/null 2>&1; then ok "$1 ($2) answers"; else warn "$1 ($2) does not answer ping"; fi; done
   if getent hosts github.com >/dev/null 2>&1; then ok "DNS works (github.com resolves)"; else warn "cannot resolve github.com"; fi
   for n in python3 jq rsync curl ssh git; do command -v $n >/dev/null 2>&1 && ok "tool $n" || warn "tool $n is missing"; done
   command -v crudini >/dev/null 2>&1 && ok "tool crudini" || info "crudini is missing (the platform stage installs it; --apply installs it before editing config files)"
   command -v terraform >/dev/null 2>&1 && ok "terraform $(terraform version 2>/dev/null | head -1)" || warn "terraform is not installed (the tf-* stages need it)"
   [ -r /etc/keystonerc ] && ok "/etc/keystonerc present (admin credentials)" || info "/etc/keystonerc not there yet (comes with the bundle, platform stage)"
-  [ -n "${AWS_ACCESS_KEY_ID:-}" ] && ok "AWS_ACCESS_KEY_ID is set (the Terraform state on s3)" || warn "AWS_ACCESS_KEY_ID is not set: the tf-* stages cannot reach the state store on s3"
+  [ -n "${AWS_ACCESS_KEY_ID:-}" ] && ok "AWS_ACCESS_KEY_ID is set (the Terraform state on s3-prod)" || warn "AWS_ACCESS_KEY_ID is not set: the tf-* stages cannot reach the state store on s3"
   if [ -n "$BUNDLE" ]; then
     if [ -r "$BUNDLE/MANIFEST" ] && (cd "$BUNDLE" && sha256sum -c --quiet SHA256SUMS 2>/dev/null); then ok "bundle $BUNDLE: checksums OK, $(grep -m1 '^date:' "$BUNDLE/MANIFEST" | cut -d' ' -f2)"; else fail "bundle $BUNDLE is missing, unreadable or its checksums do not match"; fi
   elif [ "$MODE" = apply ]; then
@@ -251,7 +251,7 @@ print("; ".join("%s on host %s" % (a["Binary"], a["Host"]) for a in json.load(sy
     else info "c3-dr-install.sh is NOT run: the platform is already here (pass --reinstall to overwrite it)"; fi
   else
     drift "OpenStack is not installed on this host"
-    if [ -z "$BUNDLE" ]; then fail "a capture bundle is needed to install it (--bundle DIR; capture: scripts/c3-dr/c3-dr-capture.sh, copy from s3:/backup/c3-dr/bundles/latest)"; return; fi
+    if [ -z "$BUNDLE" ]; then fail "a capture bundle is needed to install it (--bundle DIR; capture: scripts/c3-dr/c3-dr-capture.sh, copy from backup:/backup/c3-dr/bundles/latest)"; return; fi
     if [ "$MODE" = dry ]; then act "installer plan (its own dry run)" "$DR/c3-dr-install.sh" --bundle "$BUNDLE" --dry-run
     else act "install the platform from the bundle (phases 0 to 8)" "$DR/c3-dr-install.sh" --bundle "$BUNDLE" --yes; info "the installer asks for a reboot at the end (network files, OVS bridge): reboot, then continue with --from tuning"; fi
   fi
@@ -306,7 +306,7 @@ tf_stage() {   # tf_stage NAME DIR
   is_git "$TF_REPO" || info "no git metadata in $TF_REPO: newest file in $dir is from $(ls -t "$d"/*.tf "$d"/nodes.yaml 2>/dev/null | head -1 | xargs -r stat -c %y | cut -c1-10); a plan from an old copy can show changes that are not real (run Terraform from the Mac, or sync the repo first)"
   if [ "$dir" = environments/prod ] && [ ! -e "$d/secrets.auto.tfvars" ]; then
     skip "$dir needs $d/secrets.auto.tfvars (git-ignored; scripts/db-ha-secrets.sh makes it from the live Patroni config): not planning (terraform would ask for the database password)"; return; fi
-  [ -n "${AWS_ACCESS_KEY_ID:-}" ] || { skip "AWS_ACCESS_KEY_ID is not set: cannot read the state on s3"; return; }
+  [ -n "${AWS_ACCESS_KEY_ID:-}" ] || { skip "AWS_ACCESS_KEY_ID is not set: cannot read the state on s3-prod"; return; }
   if [ ! -d "$d/.terraform" ]; then drift "$dir is not initialised"; act "terraform init" terraform -chdir="$d" init -input=false; [ "$MODE" = dry ] && { info "plan skipped in a dry run until the directory is initialised"; return; }; fi
   if [ "$MODE" = dry ]; then
     local out rc planlog="$LOG_DIR/plan-$name-$RUN_ID.txt"
@@ -365,44 +365,44 @@ stage_apps() {
   info "by hand, after a REBUILD: restore the finance database from the NFS dump (docs/finance-db-restore.md), register the GitHub runner (new token), copy the new kubeconfigs to your Mac"
 }
 
-stage_s3() {
-  stage s3 "the s3 host: RustFS (Terraform states), state and router backups"
-  if ! rssh root@192.168.2.4 true 2>/dev/null; then warn "cannot ssh to root@192.168.2.4 (s3)"; return; fi
-  ok "ssh to s3 works"
+stage_backup_host() {
+  stage backup-host "the backup host: state and router backups, the pull of the s3-prod store (formerly the s3 host)"
+  if ! rssh root@192.168.2.4 true 2>/dev/null; then warn "cannot ssh to root@192.168.2.4 (backup)"; return; fi
+  ok "ssh to backup works"
   # RustFS (the Terraform state store) runs on the s3-prod VM since 2026-11-15; this host keeps the backups and the timers (docs/s3-state-store.md)
   rssh root@s3-prod.rdulinux.com 'docker ps --format "{{.Names}} {{.Status}}" | grep -q "^rustfs "' && ok "RustFS container is running on s3-prod" || drift "RustFS container is not running on s3-prod (scripts/s3-vm-restore.sh)"
   [ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://s3-prod.rdulinux.com:9000/health)" = 200 ] && ok "RustFS health 200" || drift "RustFS health is not 200"
   local t; for t in tfstate-backup.timer rustfs-vm-pull.timer openwrt-backup.timer; do
-    if rssh root@192.168.2.4 "systemctl is-active $t" | grep -q '^active$'; then ok "s3 timer $t is active"
-    else drift "s3 timer $t is not active"; act "install on s3" "$REPO/scripts/install-$(case $t in tfstate-backup.timer) echo s3-tfstate-backup;; rustfs-vm-pull.timer) echo rustfs-vm-pull;; *) echo s3-openwrt-backup;; esac).sh"; fi; done
+    if rssh root@192.168.2.4 "systemctl is-active $t" | grep -q '^active$'; then ok "backup timer $t is active"
+    else drift "backup timer $t is not active"; act "install on backup" "$REPO/scripts/install-$(case $t in tfstate-backup.timer) echo s3-tfstate-backup;; rustfs-vm-pull.timer) echo rustfs-vm-pull;; *) echo s3-openwrt-backup;; esac).sh"; fi; done
   local age; age=$(rssh root@192.168.2.4 'echo $(( ($(date +%s) - $(stat -c %Y /backup/terraform-state/last-ok)) / 60 ))' 2>/dev/null)
   [ -n "$age" ] && { [ "$age" -lt 150 ] && ok "state snapshot job ran $age min ago" || drift "state snapshot job last ran $age min ago (should be under 2 hours)"; }
   age=$(rssh root@192.168.2.4 'echo $(( ($(date +%s) - $(stat -c %Y /backup/openwrt/last-ok)) / 3600 ))' 2>/dev/null)
   [ -n "$age" ] && { [ "$age" -lt 50 ] && ok "router backup job ran $age h ago" || drift "router backup job last ran $age h ago (should be under 2 days)"; }
   age=$(rssh root@192.168.2.4 'echo $(( ($(date +%s) - $(stat -c %Y /backup/rustfs-vm/last-ok)) / 60 ))' 2>/dev/null)
   [ -n "$age" ] && { [ "$age" -lt 150 ] && ok "whole-store pull of s3-prod ran $age min ago" || drift "whole-store pull of s3-prod last ran $age min ago (should be under 2 hours)"; }
-  info "free space on s3: $(rssh root@192.168.2.4 'df -h /backup | tail -1 | awk "{print \$4\" free of \"\$2}"')"
+  info "free space on backup: $(rssh root@192.168.2.4 'df -h /backup | tail -1 | awk "{print \$4\" free of \"\$2}"')"
 }
 
 stage_router() {
   stage router "the OpenWrt router (192.168.2.1)"
   local before=$N_DRIFT
   ping -c1 -W2 192.168.2.1 >/dev/null 2>&1 && ok "router answers" || { warn "router does not answer"; return; }
-  if ! rssh root@192.168.2.1 true 2>/dev/null; then skip "no ssh key for root@192.168.2.1 on this host (the router backup on s3 uses its own key): config not compared"; return; fi
+  if ! rssh root@192.168.2.1 true 2>/dev/null; then skip "no ssh key for root@192.168.2.1 on this host (the router backup on the backup host uses its own key): config not compared"; return; fi
   local k v have; for kv in "dhcp.lan.start=25" "dhcp.lan.limit=35" "system.@system[0].zonename=Asia/Kolkata"; do k=${kv%%=*}; v=${kv#*=}
     have=$(rssh root@192.168.2.1 "uci get '$k'" 2>/dev/null); [ "$have" = "$v" ] && ok "router $k = $v" || drift "router $k is '${have:-<unset>}', expected '$v' (docs/openwrt-router.md)"; done
   rssh root@192.168.2.1 "uci get 'dhcp.@dnsmasq[0].rebind_domain'" 2>/dev/null | grep -q rdulinux.com && ok "router rebind_domain rdulinux.com" || drift "router rebind_domain rdulinux.com is missing"
-  [ "$RESTORE_ROUTER" = 1 ] && [ "$N_DRIFT" -gt "$before" ] && act "restore the router from s3 (reboots it)" "$REPO/scripts/openwrt-restore.sh" --yes
+  [ "$RESTORE_ROUTER" = 1 ] && [ "$N_DRIFT" -gt "$before" ] && act "restore the router from the backup host (reboots it)" "$REPO/scripts/openwrt-restore.sh" --yes
 }
 
 stage_backups() {
   stage backups "what keeps the lab recoverable"
   local age; age=$(( ( $(date +%s) - $(stat -c %Y /root/backups/terraform-state/last-ok 2>/dev/null || echo 0) ) / 60 ))
   [ "$age" -lt 150 ] && ok "state snapshots pulled to c3 $age min ago (/root/backups/terraform-state)" || drift "the pull of the state snapshots to c3 last ran $age min ago"
-  if [ -e /root/dr-staging ] || rssh root@192.168.2.4 'ls -d /backup/c3-dr/bundles/c3-dr-2* >/dev/null 2>&1'; then ok "a c3 capture bundle exists"; else warn "there is NO c3 capture bundle anywhere (/root/dr-staging, s3:/backup/c3-dr): without one the platform cannot be rebuilt. Install the nightly capture: --install-capture"; fi
+  if [ -e /root/dr-staging ] || rssh root@192.168.2.4 'ls -d /backup/c3-dr/bundles/c3-dr-2* >/dev/null 2>&1'; then ok "a c3 capture bundle exists"; else warn "there is NO c3 capture bundle anywhere (/root/dr-staging, backup:/backup/c3-dr): without one the platform cannot be rebuilt. Install the nightly capture: --install-capture"; fi
   if systemctl list-timers --no-pager 2>/dev/null | grep -q c3-dr-capture; then ok "the nightly capture timer is installed"; else
     drift "the nightly capture timer is not installed"; [ "$INSTALL_CAPTURE" = 1 ] && act "install the capture timer" "$REPO/scripts/install-c3-dr-capture.sh"; fi
-  [ -e /root/.ssh/id_ed25519 ] && ok "root has an ssh key (for s3, the capture push)" || warn "root has no ssh key"
+  [ -e /root/.ssh/id_ed25519 ] && ok "root has an ssh key (for the backup host, the capture push)" || warn "root has no ssh key"
 }
 
 stage_verify() {
@@ -426,6 +426,8 @@ print(dict(c))" 2>/dev/null)"
   info "timers: $(systemctl list-timers --no-pager 2>/dev/null | grep -E 'ovn|k8s|tfstate' | awk '{print $(NF-1)}' | tr '\n' ' ')"
 }
 
+# `s3` was this stage's name until 2026-11-15 (the host went back to being `backup`): still accepted in --only, --from and --skip
+ONLY=$(printf '%s' "$ONLY" | sed -E 's/(^|,)s3(,|$)/\1backup-host\2/g'); SKIP=$(printf '%s' "$SKIP" | sed -E 's/(^|,)s3(,|$)/\1backup-host\2/g'); [ "$FROM" = s3 ] && FROM=backup-host
 # ------------------------------------------------------------------------------------------------------------------------------------ run
 SEL="all stages"; [ -n "$FROM" ] && SEL="from $FROM"; [ -n "$ONLY" ] && SEL="only $ONLY"; [ -n "$SKIP" ] && SEL="$SEL, skipping $SKIP"
 log "INFO " "c3-rebuild-all.sh  mode=$MODE  host=$(hostname)  repo=$REPO  stages: $SEL"
@@ -436,7 +438,7 @@ for s in $STAGES; do
   case "$s" in
     preflight) stage_preflight ;; layout) stage_layout ;; platform) stage_platform ;; tuning) stage_tuning ;;
     tf-infra) stage_tf_infra ;; octavia) stage_octavia ;; api-lbs) stage_api_lbs ;; tf-prod) stage_tf_prod ;; tf-cka) stage_tf_cka ;;
-    app-lbs) stage_app_lbs ;; apps) stage_apps ;; s3) stage_s3 ;; router) stage_router ;; backups) stage_backups ;; verify) stage_verify ;;
+    app-lbs) stage_app_lbs ;; apps) stage_apps ;; backup-host) stage_backup_host ;; router) stage_router ;; backups) stage_backups ;; verify) stage_verify ;;
   esac
 done
 finish 0

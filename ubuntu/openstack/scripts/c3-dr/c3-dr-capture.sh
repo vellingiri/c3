@@ -2,7 +2,7 @@
 # Capture everything needed to rebuild the host `c3` from nothing (docs/c3-rebuild.md). Run ON c3 as root.
 #
 #   c3-dr-capture.sh --dry-run          read-only: say what would be captured and how big it is (writes nothing)
-#   c3-dr-capture.sh                    build a bundle in /root/dr-staging/c3-dr-<timestamp>/ (mode 700) and push it to s3
+#   c3-dr-capture.sh                    build a bundle in /root/dr-staging/c3-dr-<timestamp>/ (mode 700) and push it to backup
 #   c3-dr-capture.sh --no-push          build the bundle only
 #
 # What goes in (and why; nothing here is "nice to have", each item is something the rebuild script needs):
@@ -17,11 +17,11 @@
 #   packages/          dpkg selections, manually installed packages, versions of the OpenStack packages
 #   ref/               read-only dumps of the cloud (catalog, flavors, networks, security groups, load balancers, images, DNS, ...) and of the host (ip, ovs, mounts)
 #   MANIFEST + SHA256SUMS
-# Mirrored separately (large, copied only when new): the Glance image files and the patched amphora images -> s3:/backup/c3-dr/images/,
-# and /share (the NFS/Samba share, the finance app tree) -> s3:/backup/c3-dr/share/.
+# Mirrored separately (large, copied only when new): the Glance image files and the patched amphora images -> backup:/backup/c3-dr/images/,
+# and /share (the NFS/Samba share, the finance app tree) -> backup:/backup/c3-dr/share/.
 # NOT captured, on purpose: the VM disks (/var/lib/nova/instances, 70 GB; every VM is rebuilt by Terraform and its data restored from the
 # app-level backups, docs/c3-rebuild.md "What is lost"), the OVN databases (rebuilt from Neutron by Terraform), podman images, logs, caches.
-# The bundle contains secrets (service passwords, Fernet keys, the Octavia CA key, ssh keys): staging dir and the s3 copy are root-only.
+# The bundle contains secrets (service passwords, Fernet keys, the Octavia CA key, ssh keys): staging dir and the backup copy are root-only.
 set -euo pipefail
 AMP_DIRS="$(ls /root/amphora-fix/*.qcow2 /nfsshare/qcow2/*.qcow2 2>/dev/null | tr '\n' ' ' || true)"   # amphora images kept outside the OpenStack image store
 
@@ -188,7 +188,7 @@ if [ "$PUSH" = 1 ]; then
   ssh -o BatchMode=yes -o ConnectTimeout=10 "$S3" "mkdir -p $S3_DIR/bundles $S3_DIR/images $S3_DIR/share && chmod 700 $S3_DIR"
   rsync -a --chmod=D700,F600 "$OUT/" "$S3:$S3_DIR/bundles/c3-dr-$TS/"
   ssh "$S3" "ln -sfn $S3_DIR/bundles/c3-dr-$TS $S3_DIR/bundles/latest; ls -1d $S3_DIR/bundles/c3-dr-2* | head -n -$KEEP_REMOTE | xargs -r rm -rf"
-  # large files: only what is not on s3 yet
+  # large files: only what is not on backup yet
   rsync -a --ignore-existing /var/lib/glance/images/ "$S3:$S3_DIR/images/glance/"
   for d in /root/amphora-fix /nfsshare/qcow2; do [ -d "$d" ] && rsync -a --ignore-existing --include='*.qcow2' --exclude='*' "$d/" "$S3:$S3_DIR/images/amphora-fix/"; done   # the live amphora image moved from /root/amphora-fix to /nfsshare/qcow2 (the repo host) on 2026-10-22
   rsync -a --delete /share/ "$S3:$S3_DIR/share/"

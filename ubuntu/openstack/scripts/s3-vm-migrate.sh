@@ -8,7 +8,7 @@
 # /opt/rustfs/data.before-sync-<time> (never deleted). Run with no Terraform running anywhere. Since 2026-11-15 the VM is the live store (docs/s3-state-store.md);
 # after that, --old-to-vm would replace the live store with an older copy: it asks for ALLOW_OLD_TO_VM=1.
 set -euo pipefail
-OLD="${OLD_S3:-s3}"                       # ssh name of the old host
+OLD="${OLD_S3:-backup}"                       # ssh name of the old host
 OLD_URL="${OLD_URL:-http://192.168.2.4:9000}"
 VM="${S3_VM:-root@s3-prod.rdulinux.com}"
 VM_URL="${VM_URL:-http://s3-prod.rdulinux.com:9000}"

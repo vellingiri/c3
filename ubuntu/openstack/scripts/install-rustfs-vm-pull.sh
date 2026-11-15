@@ -4,8 +4,8 @@
 # Needs the pull key authorised on the VM first (the restrict,command="/usr/bin/rrsync -ro /opt/rustfs" line in its authorized_keys; docs/s3-state-store.md).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-scp -q "$HERE/rustfs-vm-pull.sh" s3:/tmp/rustfs-vm-pull
-ssh s3 bash -s <<'REMOTE'
+scp -q "$HERE/rustfs-vm-pull.sh" backup:/tmp/rustfs-vm-pull
+ssh backup bash -s <<'REMOTE'
 set -euo pipefail
 install -m 0700 /tmp/rustfs-vm-pull /usr/local/sbin/rustfs-vm-pull; rm -f /tmp/rustfs-vm-pull
 cat > /etc/systemd/system/rustfs-vm-pull.service <<'UNIT'

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Copy every Terraform state in the RustFS bucket `terraform-state` to /backup/terraform-state/<timestamp>/ on the s3 host (a different partition from
-# the RustFS data), keeping a new snapshot only when something changed. Installed on s3 as /usr/local/sbin/tfstate-backup and run hourly by
+# Copy every Terraform state in the RustFS bucket `terraform-state` to /backup/terraform-state/<timestamp>/ on the backup host (a different partition from
+# the RustFS data), keeping a new snapshot only when something changed. Installed on the backup host as /usr/local/sbin/tfstate-backup and run hourly by
 # tfstate-backup.timer (scripts/install-s3-tfstate-backup.sh). Why: RustFS runs single-node on one disk, bucket versioning keeps the history but is
 # on that same disk, and every state of this lab (infra, prod, qa, cka) lives there; docs/s3-state-store.md.
 # The access keys are read from the running container's environment at run time, never stored or printed.

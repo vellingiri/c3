@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Install the Terraform-state backup on the s3 host (hourly, to /backup/terraform-state) and an hourly pull of it to c3 (/root/backups/terraform-state),
-# so the states exist on three disks: RustFS's own, another partition on s3, and a different machine. Re-runnable. Run from your Mac.
+# Install the Terraform-state backup on the backup host (hourly, to /backup/terraform-state) and an hourly pull of it to c3 (/root/backups/terraform-state),
+# so the states exist on three disks: RustFS's own, another partition on the backup host, and a different machine. Re-runnable. Run from your Mac.
 #   scripts/install-s3-tfstate-backup.sh
 # Restore: docs/s3-state-store.md.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-scp -q "$HERE/s3-tfstate-backup.sh" s3:/tmp/tfstate-backup
-ssh s3 bash -s <<'REMOTE'
+scp -q "$HERE/s3-tfstate-backup.sh" backup:/tmp/tfstate-backup
+ssh backup bash -s <<'REMOTE'
 set -euo pipefail
 install -m 0700 /tmp/tfstate-backup /usr/local/sbin/tfstate-backup; rm -f /tmp/tfstate-backup
 cat > /etc/systemd/system/tfstate-backup.service <<'UNIT'
@@ -38,7 +38,7 @@ set -euo pipefail
 mkdir -p /root/backups/terraform-state; chmod 700 /root/backups/terraform-state
 cat > /etc/systemd/system/tfstate-pull.service <<'UNIT'
 [Unit]
-Description=pull the Terraform state snapshots from the s3 host to c3
+Description=pull the Terraform state snapshots from the backup host to c3
 After=network-online.target
 
 [Service]

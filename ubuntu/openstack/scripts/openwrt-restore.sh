@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Put an OpenWrt configuration back on the router:  scripts/openwrt-restore.sh [<archive on s3, default latest>] [--yes]
+# Put an OpenWrt configuration back on the router:  scripts/openwrt-restore.sh [<archive on the backup host, default latest>] [--yes]
 #   scripts/openwrt-restore.sh                                  # shows what it would restore and asks
-#   scripts/openwrt-restore.sh openwrt-20261022-120000.tar.gz   # a specific one (names: ssh s3 ls /backup/openwrt)
-#   scripts/openwrt-restore.sh /path/on/mac/openwrt-x.tar.gz    # a local file (when s3 is not reachable)
+#   scripts/openwrt-restore.sh openwrt-20261022-120000.tar.gz   # a specific one (names: ssh backup ls /backup/openwrt)
+#   scripts/openwrt-restore.sh /path/on/mac/openwrt-x.tar.gz    # a local file (when the backup host is not reachable)
 # Method: copy the archive to the router's /tmp, `sysupgrade -r` (unpacks over /etc/config etc.), then reboot so every service starts from it.
 # The router is unreachable for about a minute. A fresh backup of the CURRENT state is taken first (label "before-restore"), so a restore can be undone.
 # A router that was reset or replaced: give it 192.168.2.1 and ssh access first (LuCI or the failsafe mode), then run this.

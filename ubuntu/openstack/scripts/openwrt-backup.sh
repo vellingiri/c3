@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Back up the OpenWrt router (192.168.2.1) and keep the copies on the s3 host:  scripts/openwrt-backup.sh [label]
-# Two files per run in s3:/backup/openwrt/ : openwrt-<date>[-label].tar.gz (sysupgrade -b: everything /etc/config and the other kept files; restore with scripts/openwrt-restore.sh)
+# Back up the OpenWrt router (192.168.2.1) and keep the copies on the backup host:  scripts/openwrt-backup.sh [label]
+# Two files per run in backup:/backup/openwrt/ : openwrt-<date>[-label].tar.gz (sysupgrade -b: everything /etc/config and the other kept files; restore with scripts/openwrt-restore.sh)
 # and openwrt-<date>[-label].uci.txt (uci export, readable, for diffs). `latest.tar.gz` / `latest.uci.txt` point at the newest. The newest 30 runs are kept.
 # Read-only on the router (the archive is built in its /tmp and removed). Run from the Mac; needs ssh keys for root@ROUTER and root@s3.
 set -euo pipefail

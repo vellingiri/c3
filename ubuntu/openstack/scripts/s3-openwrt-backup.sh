@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Daily backup of the OpenWrt router, run ON THE s3 HOST (installed as /usr/local/sbin/openwrt-backup, timer openwrt-backup.timer, see install-s3-openwrt-backup.sh).
+# Daily backup of the OpenWrt router, run ON THE BACKUP HOST (installed as /usr/local/sbin/openwrt-backup, timer openwrt-backup.timer, see install-s3-openwrt-backup.sh).
 # Pulls `sysupgrade -b` and `uci export` from root@192.168.2.1 with the key /root/.ssh/openwrt_backup and stores them in /backup/openwrt/ in the same
 # format as scripts/openwrt-backup.sh, a new copy only when a saved file changed (fingerprint of the contents of every file `sysupgrade -l` lists).
 # /backup/openwrt/last-ok is touched on every successful run, changed or not: its age is the health of this job (older than 2 days = broken).

@@ -6,6 +6,16 @@ Update this file in the same commit as any change, and list anything done **by h
 
 ---
 
+
+## 2026-11-15: the `s3` host is `backup` again (`backup.rdulinux.com`)
+
+- With the state store on the `s3-prod` VM and the old RustFS container stopped, the machine at 192.168.2.4 is only the backup machine again, so it has its old name back.
+  Its hostname and `/etc/hosts` line are `backup` / `backup.rdulinux.com`; `infra/infra.yaml` gets a `backup` DNS record (with the reverse record) and keeps `s3` as a forward-only
+  alias of the same address until nothing says `s3` any more. **`terraform apply` in `infra/` creates the DNS record**; until then `ssh backup` works through the ssh alias (pinned to the address).
+- Scripts and docs that named the host now say `backup` (`ssh backup`, `backup:/backup/...`). `c3-rebuild-all.sh`'s `s3` stage is now `backup-host`; `--only s3`, `--from s3` and `--skip s3` still work.
+  Nothing else changed: the Terraform backends and the state pull from c3 use addresses, and nothing mounts the NFS export by name. The script file names that contain `s3` (`s3-tfstate-backup.sh` and so on)
+  are unchanged, because they name the S3 API snapshots, not the host.
+
 ## 2026-11-15 — the Terraform state store gets a VM on c3 (`s3-prod`), switched the same day
 - New role `objstore` (`modules/node`, `cloud-init/objstore.yaml.tftpl`) and node `s3-prod` in `environments/prod/nodes.yaml`: RustFS 1.0.2, a verified copy of the state store of the desktop `s3` host (4 objects, 438 versions, identical). Terraform and the state snapshots use the VM since the switch (`docs/s3-state-store.md`, "Switched"); the old host's container stays, unused, for a week as the rollback.
 - Hourly whole-store pull to the backup box (`scripts/rustfs-vm-pull.sh`, installer, `rustfs-vm-pull.timer`), `scripts/s3-vm-restore.sh` (rehearsed with a real restore), `scripts/s3-vm-migrate.sh` (compare / final re-sync), rebuild kit and pre-migration copy on the backup box.

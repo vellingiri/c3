@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Install the daily router backup on the s3 host (run from the Mac; needs ssh keys for s3 and for the router):  scripts/install-s3-openwrt-backup.sh
-# 1. key pair on s3 (/root/.ssh/openwrt_backup, no passphrase, used only for this) and its public half added to the router's /etc/dropbear/authorized_keys,
+# Install the daily router backup on the backup host (run from the Mac; needs ssh keys for backup and for the router):  scripts/install-s3-openwrt-backup.sh
+# 1. key pair on the backup host (/root/.ssh/openwrt_backup, no passphrase, used only for this) and its public half added to the router's /etc/dropbear/authorized_keys,
 # 2. the script as /usr/local/sbin/openwrt-backup, service + timer (daily 03:15, Persistent so a missed run happens at boot),
 # 3. one run now. Nothing on c3, nothing else on the router.
 set -euo pipefail
@@ -8,7 +8,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"; ROUTER=${ROUTER:-root@192.168.2.1}; S3=${
 ssh "$S3" '[ -f /root/.ssh/openwrt_backup ] || ssh-keygen -q -t ed25519 -N "" -C "s3-openwrt-backup" -f /root/.ssh/openwrt_backup; chmod 600 /root/.ssh/openwrt_backup'
 PUB=$(ssh "$S3" 'cat /root/.ssh/openwrt_backup.pub')
 ssh "$ROUTER" "grep -qF '$PUB' /etc/dropbear/authorized_keys || echo '$PUB' >> /etc/dropbear/authorized_keys; chmod 600 /etc/dropbear/authorized_keys; wc -l < /etc/dropbear/authorized_keys"
-# so that a plain `ssh root@192.168.2.1` (or `ssh openwrt-router`) from s3 uses that key too
+# so that a plain `ssh root@192.168.2.1` (or `ssh openwrt-router`) from the backup host uses that key too
 ssh "$S3" 'grep -q "^Host openwrt-router" /root/.ssh/config 2>/dev/null || { printf "\nHost openwrt-router 192.168.2.1\n  HostName 192.168.2.1\n  User root\n  IdentityFile /root/.ssh/openwrt_backup\n  IdentitiesOnly yes\n" >> /root/.ssh/config; chmod 600 /root/.ssh/config; }'
 scp -q "$HERE/s3-openwrt-backup.sh" "$S3:/usr/local/sbin/openwrt-backup"
 ssh "$S3" 'chmod 0755 /usr/local/sbin/openwrt-backup

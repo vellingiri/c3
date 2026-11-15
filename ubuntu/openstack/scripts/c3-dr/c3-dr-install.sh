@@ -4,7 +4,7 @@
 # (scripts/c3-dr/c3-dr-capture.sh). Run ON the new host as root, after a minimal Debian 13 install.
 #
 #   c3-dr-install.sh --bundle DIR [--images DIR] [--share DIR] [--yes] [--dry-run] [--from N] [--only N]
-#     --bundle  a bundle directory, e.g. a copy of s3:/backup/c3-dr/bundles/latest
+#     --bundle  a bundle directory, e.g. a copy of backup:/backup/c3-dr/bundles/latest
 #     --images  Glance image files (default <bundle>/../../images/glance)
 #     --share   a copy of the /share tree (default <bundle>/../../share)
 #     --dry-run print every step instead of doing it
