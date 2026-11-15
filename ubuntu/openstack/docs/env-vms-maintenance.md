@@ -3,11 +3,11 @@
 `scripts/env-vms.py` brings every VM of **one environment** (`prod`, `cka`, `qa`) down in a safe order and back up again, from your Mac, with no Terraform. Written 2026-11-15.
 
 ```bash
-scripts/env-vms.py status prod                    # VMs and their state, Kubernetes nodes Ready, Patroni roles
-scripts/env-vms.py stop   prod --dry-run          # the plan, nothing changes
-scripts/env-vms.py stop   prod                    # no confirmation question (add --confirm to be asked to type "prod")
-scripts/env-vms.py start  prod                    # brings back exactly what the last stop stopped
-scripts/env-vms.py start  prod --all              # every VM of the environment that is SHUTOFF (no saved list needed)
+scripts/env-vms.py prod status                    # VMs and their state, Kubernetes nodes Ready, Patroni roles
+scripts/env-vms.py prod stop --dry-run          # the plan, nothing changes
+scripts/env-vms.py prod stop                    # no confirmation question (add --confirm to be asked to type "prod")
+scripts/env-vms.py prod start                    # brings back exactly what the last stop stopped
+scripts/env-vms.py prod start --all              # every VM of the environment that is SHUTOFF (no saved list needed)
 ```
 
 ## How it picks the VMs and the order
@@ -16,7 +16,7 @@ scripts/env-vms.py start  prod --all              # every VM of the environment 
   1. the GitHub runner (`ci1-prod`), 2. the workers, 3. the control planes, 4. the databases: the **Patroni standby first, the leader last** (it asks Patroni who the leader is), 5. the witness (`dbw1-prod`, an etcd member).
 - **Start order** is the exact reverse: witness, database **leader**, standby, control planes, workers, runner. It also waits for what the next step needs: a Patroni leader before the control planes, the API server before the workers, then every node Ready.
 - At the end of a start it deletes the `Error` / `ContainerStatusUnknown` pod records a graceful shutdown leaves (`kubectl delete pod -A --field-selector=status.phase=Failed`; `--no-cleanup` skips it) and prints the checks: nodes, Patroni, and for prod the finance front door.
-- **What was stopped is remembered** in `~/.cache/c3-env-vms/<env>.json` (mode 600), so a VM that was off on purpose is not started by `start`. Running `stop` twice merges the lists. After a successful `start` the file is renamed `<env>.json.last`.
+- **What was stopped is remembered twice:** in `~/.cache/c3-env-vms/<env>.json` on the machine that ran `stop`, **and in OpenStack** as the properties `maint_stopped` / `maint_sub` on each stopped VM (`openstack server show <vm> -c properties`). So you can stop on c3 and start from your Mac, or the other way round. A VM that was off on purpose carries no mark and is not started by `start`; the marks are removed after a successful start. Running `stop` twice merges the lists. After a successful `start` the file is renamed `<env>.json.last`.
 - It reaches OpenStack with `ssh c3` (admin credentials in `/root/.bashrc`), the cluster with `~/.kube/<env>` (context `<env>`) and the databases with ssh names like `db1-prod`. Set `C3_HOST` to use another name for c3.
 
 ## Good to know

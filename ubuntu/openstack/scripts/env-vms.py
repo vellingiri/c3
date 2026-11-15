@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Shut down, start, or show every VM of ONE environment (prod, cka, qa) in a safe order, for maintenance windows.
 
-    scripts/env-vms.py status prod
-    scripts/env-vms.py stop   prod [--yes] [--dry-run]
-    scripts/env-vms.py start  prod [--all] [--dry-run] [--no-cleanup]
+    scripts/env-vms.py prod status
+    scripts/env-vms.py prod stop  [--dry-run] [--confirm]
+    scripts/env-vms.py prod start [--all] [--dry-run] [--no-cleanup]
 
 Run it from your Mac. It reaches OpenStack through `ssh c3` (the admin credentials are in /root/.bashrc there) and the cluster/database
 through your usual kubeconfig (~/.kube/<env>, context <env>) and ssh names (db1-prod ...). Nothing is installed anywhere.
@@ -89,7 +89,7 @@ def list_vms(env):
             continue
         role = props.get("role", "")
         rank = RANK.get(role) or guess_rank(v["Name"])
-        vms.append({"id": v["ID"], "name": v["Name"], "status": v["Status"], "role": role, "rank": rank, "sub": 0})
+        vms.append({"id": v["ID"], "name": v["Name"], "status": v["Status"], "role": role, "rank": rank, "sub": 0, "props": props})
     return vms
 
 
@@ -225,6 +225,18 @@ def save_state(env, vms):
     os.chmod(state_path(env), 0o600)
 
 
+def mark_stopped(vms):
+    """Also record the stop in the VMs' own Nova metadata, so `start` works from any machine, not only the one that ran `stop`."""
+    stamp = datetime.datetime.now().isoformat(timespec="seconds")
+    for v in vms:
+        openstack("server", "set", "--property", "maint_stopped=" + stamp, "--property", "maint_sub=%d" % v["sub"], v["id"])
+
+
+def unmark_stopped(vms):
+    for v in vms:
+        openstack("server", "unset", "--property", "maint_stopped", "--property", "maint_sub", v["id"])
+
+
 # ---- commands -------------------------------------------------------------------------------------------------------
 def tiers(vms, reverse):
     keys = sorted({(v["rank"], v["sub"]) for v in vms}, reverse=reverse)
@@ -283,7 +295,8 @@ def cmd_stop(env, args):
         if ans.strip() != env:
             die("cancelled")
     save_state(env, running)
-    say("saved the list to %s" % state_path(env))
+    mark_stopped(running)
+    say("saved the list to %s and marked the VMs in OpenStack (maint_stopped), so any machine can start them" % state_path(env))
     for i, ((rank, sub), group) in enumerate(tiers(running, reverse=False), 1):
         names = " ".join(v["name"] for v in group)
         say("\n== %d. stop %s: %s" % (i, RANK_NAME.get(rank, "other"), names))
@@ -293,7 +306,7 @@ def cmd_stop(env, args):
             die("still running after %ds: %s (look at them; nothing further was stopped; `start` brings back what was stopped)"
                 % (STOP_TIER_TIMEOUT, " ".join(v["name"] for v in group if v["id"] in left)))
         say("   all SHUTOFF")
-    say("\nAll %d VMs of %s are off. Bring them back with: scripts/env-vms.py start %s" % (len(running), env, env))
+    say("\nAll %d VMs of %s are off. Bring them back with: scripts/env-vms.py %s start" % (len(running), env, env))
 
 
 def cmd_start(env, args):
@@ -304,15 +317,16 @@ def cmd_start(env, args):
     st = load_state(env)
     if args.all:
         todo = [v for v in vms if v["status"] == "SHUTOFF"]
-    elif st:
-        todo = []
-        for s in st["vms"]:
-            v = by_id.get(s["id"])
-            if v and v["status"] == "SHUTOFF":
-                v["sub"] = s.get("sub", 0)
-                todo.append(v)
     else:
-        die("no saved list for %s (the last stop's file is missing). To start every VM that is off: scripts/env-vms.py start %s --all" % (env, env))
+        todo = []
+        saved = {s_["id"]: s_ for s_ in (st or {}).get("vms", [])}
+        for v in vms:
+            marked = "maint_stopped" in v.get("props", {})
+            if v["status"] == "SHUTOFF" and (v["id"] in saved or marked):
+                v["sub"] = int(saved[v["id"]].get("sub", 0)) if v["id"] in saved else int(v["props"].get("maint_sub", 0) or 0)
+                todo.append(v)
+        if not todo and not st and not any("maint_stopped" in v.get("props", {}) for v in vms):
+            die("nothing was stopped by `stop` for %s (no saved list here and no maint_stopped mark on any VM). To start every VM that is off: scripts/env-vms.py %s start --all" % (env, env))
     already = [v["name"] for v in vms if v["status"] == "ACTIVE"]
     if already:
         say("already running: " + " ".join(already))
@@ -361,24 +375,28 @@ def cmd_start(env, args):
     if env in FRONT_DOOR:
         rc, out = run(["curl", "-s", "-o", "/dev/null", "-m", "8", "-w", "%{http_code}", FRONT_DOOR[env]], 15)
         say("front door %s: %s" % (FRONT_DOOR[env], out.strip() or "no answer yet"))
-    if st and not args.all:
+    unmark_stopped(todo)
+    if st:
         try:
             os.replace(state_path(env), state_path(env) + ".last")
         except OSError:
             pass
-    say("\nDone. If the front door or a node is not ready yet, wait a minute and run: scripts/env-vms.py status %s" % env)
+    say("\nDone. If the front door or a node is not ready yet, wait a minute and run: scripts/env-vms.py %s status" % env)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Stop, start or show all the VMs of one environment in a safe order.")
-    ap.add_argument("command", choices=["stop", "start", "status"])
     ap.add_argument("env", help="prod | cka | qa")
+    ap.add_argument("command", choices=["stop", "start", "status"])
     ap.add_argument("--confirm", action="store_true", help="stop: ask for the environment name first (by default it does not ask)")
     ap.add_argument("--yes", action="store_true", help=argparse.SUPPRESS)   # old option, now the default; accepted and ignored
     ap.add_argument("--dry-run", action="store_true", help="show the plan only")
     ap.add_argument("--all", action="store_true", help="start: every VM of the environment that is SHUTOFF, not just what the last stop saved")
     ap.add_argument("--no-cleanup", action="store_true", help="start: keep the leftover Error pod records")
-    args = ap.parse_args()
+    argv = sys.argv[1:]
+    if len(argv) >= 2 and argv[0] in ("stop", "start", "status"):   # the old order (command first) still works
+        argv[0], argv[1] = argv[1], argv[0]
+    args = ap.parse_args(argv)
     {"stop": cmd_stop, "start": cmd_start, "status": cmd_status}[args.command](args.env, args)
 
 
