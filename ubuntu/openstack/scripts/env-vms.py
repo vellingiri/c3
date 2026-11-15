@@ -2,14 +2,16 @@
 """Shut down, start, or show every VM of ONE environment (prod, cka, qa) in a safe order, for maintenance windows.
 
     scripts/env-vms.py prod status
-    scripts/env-vms.py prod stop  [--dry-run] [--confirm]
-    scripts/env-vms.py prod start [--all] [--dry-run] [--no-cleanup]
+    scripts/env-vms.py prod stop  [--lbs] [--dry-run] [--confirm]
+    scripts/env-vms.py prod start [--all] [--lbs] [--dry-run] [--no-cleanup]
 
 Run it from your Mac. It reaches OpenStack through `ssh c3` (the admin credentials are in /root/.bashrc there) and the cluster/database
 through your usual kubeconfig (~/.kube/<env>, context <env>) and ssh names (db1-prod ...). Nothing is installed anywhere.
 
-Which VMs: those whose Nova metadata says env=<env> (Terraform sets `env` and `role` on every node). The Octavia amphorae (the load balancers)
-carry no env, so they are never touched: the load balancers stay up and only mark their members down while the VMs are off.
+Which VMs: those whose Nova metadata says env=<env> (Terraform sets `env` and `role` on every node). The Octavia amphorae (the load balancers) carry no
+env, so by default they are not touched: the load balancers stay up and only mark their members down while the VMs are off. With `--lbs` the amphorae of
+the environment's load balancers (prod: finance-lb, argo-lb, prod-api; cka: cka-api) are stopped LAST and started FIRST, and the Octavia health manager is
+stopped before the first amphora goes down (it rebuilds an amphora that is silent for 5 minutes) and started again after they are back.
 
 Order (graceful stop: an ACPI shutdown, then Nova forces it after its own timeout; the kubelet's graceful-shutdown setting stops the pods first):
     stop :  runner  ->  workers  ->  control planes  ->  databases (the standby first, the leader last)  ->  witness
@@ -40,8 +42,15 @@ START_TIER_TIMEOUT = 300
 FRONT_DOOR = {"prod": "http://finance.rdulinux.com/health"}
 
 # stop order: smaller first. Start is the reverse.
-RANK = {"runner": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5}
-RANK_NAME = {1: "runner", 2: "workers", 3: "control planes", 4: "databases", 5: "witness"}
+RANK = {"runner": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
+RANK_NAME = {1: "runner", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
+# The Octavia load balancers that belong to each environment (their amphorae are the VMs `--lbs` stops and starts). Override: ENV_LBS="prod=finance-lb,argo-lb,prod-api;cka=cka-api"
+ENV_LBS = {"prod": ["finance-lb", "argo-lb", "prod-api"], "cka": ["cka-api"]}
+if os.environ.get("ENV_LBS"):
+    ENV_LBS = {k: v.split(",") for k, v in (x.split("=", 1) for x in os.environ["ENV_LBS"].split(";") if "=" in x)}
+LB_SETTLE = int(os.environ.get("LB_SETTLE", "90"))   # seconds the amphorae get to boot and send heartbeats before the health manager is started again
+INCLUDE_LBS_FLAG = False
+INCLUDE_LBS = False                                  # set in main(): the amphorae are listed with the VMs of the environment when this is on
 
 
 def say(msg=""):
@@ -90,7 +99,52 @@ def list_vms(env):
         role = props.get("role", "")
         rank = RANK.get(role) or guess_rank(v["Name"])
         vms.append({"id": v["ID"], "name": v["Name"], "status": v["Status"], "role": role, "rank": rank, "sub": 0, "props": props})
+    if INCLUDE_LBS:
+        vms.extend(list_amphorae(env))
     return vms
+
+
+def list_amphorae(env):
+    """The amphora VMs of this environment's load balancers: server `amphora-<amphora id>` ↔ `openstack loadbalancer amphora list` ↔ the LB name."""
+    wanted = ENV_LBS.get(env, [])
+    if not wanted:
+        return []
+    remote = ("source /root/.bashrc >/dev/null 2>&1; (openstack server list --all-projects --long -f json -c ID -c Name -c Status -c Properties 2>/dev/null;"
+              " echo '@@'; openstack loadbalancer amphora list -f json 2>/dev/null; echo '@@'; openstack loadbalancer list -f json 2>/dev/null)")
+    rc, out = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", C3, remote], 240)
+    parts = out.split("@@")
+    if rc != 0 or len(parts) != 3:
+        die("could not list the load balancer VMs through ssh %s" % C3)
+    try:
+        servers, amps, lbs = (json.loads(x) for x in parts)
+    except ValueError:
+        die("unexpected answer while listing the load balancer VMs")
+    lb_name = {l.get("id") or l.get("ID"): l.get("name") or l.get("Name") for l in lbs}
+    amp_lb = {(a.get("id") or a.get("ID")): lb_name.get(a.get("loadbalancer_id") or a.get("Loadbalancer_id")) for a in amps}
+    out_vms = []
+    for sv in servers:
+        if not sv["Name"].startswith("amphora-"):
+            continue
+        lb = amp_lb.get(sv["Name"][len("amphora-"):])
+        if lb in wanted:
+            out_vms.append({"id": sv["ID"], "name": sv["Name"], "status": sv["Status"], "role": "amphora", "rank": 6, "sub": 0,
+                            "props": parse_props(sv.get("Properties")), "lb": lb})
+    return out_vms
+
+
+def health_manager(action):
+    """start | stop | is-active the Octavia health manager on c3. While it runs it rebuilds any amphora silent for heartbeat_timeout (300 s)."""
+    rc, out = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", C3, "systemctl %s octavia-health-manager" % action], 90)
+    return rc, out.strip()
+
+
+def lb_summary(env):
+    rc, out = openstack("loadbalancer", "list", "-f", "json", "-c", "name", "-c", "operating_status", "-c", "provisioning_status")
+    try:
+        return ", ".join("%s %s/%s" % (l["name"], l.get("provisioning_status"), l.get("operating_status"))
+                         for l in json.loads(out) if l["name"] in ENV_LBS.get(env, []))
+    except ValueError:
+        return "unknown"
 
 
 def guess_rank(name):
@@ -269,6 +323,9 @@ def cmd_status(env, args):
     members = patroni([v for v in vms if v["status"] == "ACTIVE"])
     if members:
         say("Patroni: " + ", ".join("%s %s" % (m.get("Member"), m.get("Role")) for m in members))
+    if ENV_LBS.get(env):
+        say("load balancers: " + lb_summary(env))
+        say("Octavia health manager: %s" % (health_manager("is-active")[1] or "unknown"))
 
 
 def cmd_stop(env, args):
@@ -286,7 +343,10 @@ def cmd_stop(env, args):
     if any(v["rank"] == 4 for v in running):
         say("Patroni leader: %s (stopped last of the databases)" % (leader or "unknown (stopped in name order)"))
     show_plan("Stop plan for %s (%d VMs):" % (env, len(running)), running, reverse=False)
-    say("\nThe load balancers and their amphorae are not touched; the app is down from the first tier on.")
+    if any(v["rank"] == 6 for v in running):
+        say("\nThe Octavia health manager is stopped first and the load balancers (amphorae) go last; `start` brings them back FIRST and the health manager after them.")
+    else:
+        say("\nThe load balancers and their amphorae are not touched (add --lbs to stop them too); the app is down from the first tier on.")
     if args.dry_run:
         say("(dry run: nothing stopped)")
         return
@@ -294,6 +354,11 @@ def cmd_stop(env, args):
         ans = input("Type the environment name (%s) to stop these %d VMs: " % (env, len(running)))
         if ans.strip() != env:
             die("cancelled")
+    if any(v["rank"] == 6 for v in running):
+        rc, out = health_manager("stop")
+        say("Octavia health manager stopped first (otherwise it rebuilds the amphorae that go quiet): rc=%d" % rc)
+        if rc != 0:
+            die("could not stop octavia-health-manager on %s; nothing was stopped" % C3)
     save_state(env, running)
     mark_stopped(running)
     say("saved the list to %s and marked the VMs in OpenStack (maint_stopped), so any machine can start them" % state_path(env))
@@ -316,7 +381,7 @@ def cmd_start(env, args):
     by_id = {v["id"]: v for v in vms}
     st = load_state(env)
     if args.all:
-        todo = [v for v in vms if v["status"] == "SHUTOFF"]
+        todo = [v for v in vms if v["status"] == "SHUTOFF" and (v["rank"] != 6 or INCLUDE_LBS_FLAG)]
     else:
         todo = []
         saved = {s_["id"]: s_ for s_ in (st or {}).get("vms", [])}
@@ -350,6 +415,11 @@ def cmd_start(env, args):
         if left:
             die("not ACTIVE after %ds: %s" % (START_TIER_TIMEOUT, " ".join(v["name"] for v in group if v["id"] in left)))
         say("   all ACTIVE")
+        if rank == 6:
+            say("   waiting %ds for the amphorae to boot and send heartbeats, then starting the Octavia health manager ..." % LB_SETTLE)
+            time.sleep(LB_SETTLE)
+            rc, out = health_manager("start")
+            say("   Octavia health manager: %s" % ("started" if rc == 0 else "COULD NOT START (start it: ssh %s systemctl start octavia-health-manager)" % C3))
         # what the NEXT tier needs, once the last tier of this kind is up
         next_rank = plan[i + 1][0][0] if i + 1 < len(plan) else None
         if rank == 4 and next_rank != 4:
@@ -369,6 +439,12 @@ def cmd_start(env, args):
             rc, out = kubectl(env, "delete", "pod", "-A", "--field-selector=status.phase=Failed", timeout=120)
             n = len([l for l in out.splitlines() if l.startswith("pod ")])
             say("   cleared %d leftover Error pod record(s) from the graceful shutdown" % n)
+    rc, st_hm = health_manager("is-active")
+    if st_hm != "active":
+        rc, _ = health_manager("start")
+        say("Octavia health manager was %s: started again (rc=%d)" % (st_hm or "not running", rc))
+    if ENV_LBS.get(env):
+        say("load balancers: " + lb_summary(env))
     members = patroni(all_vms)
     if members:
         say("Patroni: " + ", ".join("%s %s %s" % (m.get("Member"), m.get("Role"), m.get("State")) for m in members))
@@ -392,11 +468,15 @@ def main():
     ap.add_argument("--yes", action="store_true", help=argparse.SUPPRESS)   # old option, now the default; accepted and ignored
     ap.add_argument("--dry-run", action="store_true", help="show the plan only")
     ap.add_argument("--all", action="store_true", help="start: every VM of the environment that is SHUTOFF, not just what the last stop saved")
+    ap.add_argument("--lbs", action="store_true", help="also stop (or, with --all, start) the load-balancer VMs of this environment (the Octavia amphorae); the health manager is handled")
     ap.add_argument("--no-cleanup", action="store_true", help="start: keep the leftover Error pod records")
     argv = sys.argv[1:]
     if len(argv) >= 2 and argv[0] in ("stop", "start", "status"):   # the old order (command first) still works
         argv[0], argv[1] = argv[1], argv[0]
     args = ap.parse_args(argv)
+    global INCLUDE_LBS, INCLUDE_LBS_FLAG
+    INCLUDE_LBS_FLAG = args.lbs
+    INCLUDE_LBS = args.lbs or args.command in ("start", "status")     # start finds amphorae that `stop --lbs` marked; status shows them
     {"stop": cmd_stop, "start": cmd_start, "status": cmd_status}[args.command](args.env, args)
 
 
