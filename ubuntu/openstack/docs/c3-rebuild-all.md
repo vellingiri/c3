@@ -15,7 +15,7 @@ Options: `--tf-repo DIR` (where the Terraform code and `secrets.auto.tfvars` are
 ## Stages
 | Stage | Checks (dry run) | `--apply` does |
 |---|---|---|
-| `preflight` | root, Debian 13, CPU/RAM, VT-x, NICs, BIOS `A.C0`, ping of repo/s3/router, DNS, tools, `AWS_*` keys, the bundle's checksums | asks for `rebuild` |
+| `preflight` | root, Debian 13, CPU/RAM, VT-x, NICs, BIOS `A.C0`, ping of repo/backup/router, DNS, tools, `AWS_*` keys, the bundle's checksums | asks for `rebuild` |
 | `layout` | `/var/lib/nova` on its own partition, `/share`, `/nfsshare`, kernels N and N-1, Wi-Fi absent, time, timezone, IPv6 sysctl, `br0` | mounts a partition given with `--nova-dev`, sets the timezone. **Never partitions a disk** (it prints how) |
 | `platform` | the 35 services, the 9 databases, the 7 catalog endpoints, Nova/Neutron agents, the images and the single `Amphora` tag | `c3-dr-install.sh` (phases 0 to 8) **only if OpenStack is not installed** (or `--reinstall`) |
 | `tuning` | `nova.conf` (RAM 1.2, disk 2.5, resize on the same host, resume guests), `octavia.conf` (heartbeat 300, threshold 2, amp flavor/tag), `libvirt-guests`, the two systemd drop-ins, OVN settings, NFS/Samba, the three timers and two reconcilers, **8 flavors** (`m1.octavia` id 100 is private), the Octavia flavor `ha` | sets what differs (crudini), creates missing flavors, restarts nova/octavia once at the end |
