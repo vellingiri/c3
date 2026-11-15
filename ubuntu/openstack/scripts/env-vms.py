@@ -42,6 +42,9 @@ START_TIER_TIMEOUT = 300
 FRONT_DOOR = {"prod": "http://finance.rdulinux.com/health"}
 
 # stop order: smaller first. Start is the reverse.
+# Roles that are never stopped or started by this script, even though they carry env=<env>. The S3 server (s3-prod) is the Terraform state store: while it
+# is off, no `terraform plan` or `apply` in any stack can read or write its state, and the tfstate backups have nothing to copy.
+NEVER_STOP_ROLES = {"objstore"}
 RANK = {"runner": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
 RANK_NAME = {1: "runner", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
 # The Octavia load balancers that belong to each environment (their amphorae are the VMs `--lbs` stops and starts). Override: ENV_LBS="prod=finance-lb,argo-lb,prod-api;cka=cka-api"
@@ -97,6 +100,8 @@ def list_vms(env):
         if props.get("env") != env:
             continue
         role = props.get("role", "")
+        if role in NEVER_STOP_ROLES:
+            continue
         rank = RANK.get(role) or guess_rank(v["Name"])
         vms.append({"id": v["ID"], "name": v["Name"], "status": v["Status"], "role": role, "rank": rank, "sub": 0, "props": props})
     if INCLUDE_LBS:
