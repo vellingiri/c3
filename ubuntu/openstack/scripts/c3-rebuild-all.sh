@@ -142,6 +142,7 @@ unit_expect() {  # unit_expect UNIT [enabled|-] [active|-]  (a "-" means: do not
   return 1
 }
 file_expect() { if [ -e "$1" ]; then ok "$2 ($1)"; else drift "$2 missing: $1"; return 1; fi; }
+is_git() { git -C "$1" rev-parse --git-dir >/dev/null 2>&1; }   # a checkout counts even when the repository root is a parent folder (/nfsshare/c3 holds ubuntu/openstack)
 osx() { ( . /etc/keystonerc; openstack "$@" ); }     # openstack with the admin credentials, visible output: for act
 os_has() { os "$@" 2>/dev/null | grep -q .; }   # os_has openstack-args : something was returned
 flavor_spec() { os flavor show "$1" -f json 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["vcpus"], d["ram"], d["disk"])' 2>/dev/null; }
@@ -176,7 +177,12 @@ stage_preflight() {
     os_has server list >/dev/null 2>&1 || warn "no --bundle given: only fine if OpenStack is already installed here"
   fi
   [ -d "$REPO/scripts" ] && ok "repository: $REPO" || fail "repository not found at $REPO (--repo)"
-  [ -e "$REPO/.git" ] && info "repository has git metadata ($(git -C "$REPO" log --oneline -1 2>/dev/null))" || warn "$REPO is a plain copy without git metadata: cannot tell how current it is"
+  if is_git "$REPO"; then
+    local behind; git -C "$REPO" fetch -q origin 2>/dev/null; behind=$(git -C "$REPO" rev-list --count HEAD..@{u} 2>/dev/null || echo "?")
+    if [ "$behind" = 0 ]; then ok "repository is a git checkout and current ($(git -C "$REPO" log --oneline -1 2>/dev/null | cut -c1-70))"
+    else warn "repository is $behind commit(s) behind its remote: git pull --ff-only (a stale copy makes Terraform plans misleading)"; fi
+    [ -n "$(git -C "$REPO" status --porcelain 2>/dev/null | grep -v '^??')" ] && warn "the repository has uncommitted changes: $(git -C "$REPO" status --porcelain | grep -v '^??' | wc -l) file(s)"
+  else warn "$REPO is not a git checkout: cannot tell how current it is"; fi
   if [ "$MODE" = apply ] && [ "$YES" != 1 ]; then
     read -r -p "$(ts) This will change THIS host. Type 'rebuild' to continue: " a || a=""
     [ "$a" = rebuild ] || { log "STOP " "cancelled"; finish 1; }
@@ -297,7 +303,7 @@ tf_stage() {   # tf_stage NAME DIR
   stage "$name" "terraform in $dir (dry run = plan without a lock, nothing is written)"
   [ -d "$d" ] || { skip "no $d (--tf-repo)"; return; }
   command -v terraform >/dev/null 2>&1 || { skip "terraform is not installed"; return; }
-  [ -e "$TF_REPO/.git" ] || info "no git metadata in $TF_REPO: newest file in $dir is from $(ls -t "$d"/*.tf "$d"/nodes.yaml 2>/dev/null | head -1 | xargs -r stat -c %y | cut -c1-10); a plan from an old copy can show changes that are not real (run Terraform from the Mac, or sync the repo first)"
+  is_git "$TF_REPO" || info "no git metadata in $TF_REPO: newest file in $dir is from $(ls -t "$d"/*.tf "$d"/nodes.yaml 2>/dev/null | head -1 | xargs -r stat -c %y | cut -c1-10); a plan from an old copy can show changes that are not real (run Terraform from the Mac, or sync the repo first)"
   if [ "$dir" = environments/prod ] && [ ! -e "$d/secrets.auto.tfvars" ]; then
     skip "$dir needs $d/secrets.auto.tfvars (git-ignored; scripts/db-ha-secrets.sh makes it from the live Patroni config): not planning (terraform would ask for the database password)"; return; fi
   [ -n "${AWS_ACCESS_KEY_ID:-}" ] || { skip "AWS_ACCESS_KEY_ID is not set: cannot read the state on s3"; return; }
