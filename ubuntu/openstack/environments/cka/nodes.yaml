@@ -16,7 +16,7 @@ defaults:
     nfs_server: repo.rdulinux.com
     k8s_version: v1.30
     calico_version: v3.28.0
-    pod_cidr: 192.168.0.0/16
+    pod_cidr: 10.244.0.0/16    # was 192.168.0.0/16 (overlapped the 192.168.2.x floating network); changed 2026-11-19 with the rebuild
     cluster_name: cka
     join_delay: "0"      # seconds a control-plane join waits (stagger nodes that are created together)
     api_endpoint: "api.cka.rdulinux.com"   # name of the cluster's API load balancer once it is HA (api.cka.rdulinux.com); empty = the first controller's floating IP
