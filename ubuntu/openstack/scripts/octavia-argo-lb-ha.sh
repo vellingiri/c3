@@ -9,7 +9,7 @@ set -euo pipefail
 OLD=argo-lb
 NEW=argo-lb-ha
 FIP=192.168.2.113
-MEMBERS="w1=10.0.1.67 w2=10.0.1.197 w3=10.0.1.45"      # prod workers, Argo CD NodePort 30443
+MEMBERS="worker1=10.0.1.67 worker2=10.0.1.197 worker3=10.0.1.45"      # prod workers, Argo CD NodePort 30443
 PORT=30443
 
 wait_lb() {  # wait_lb <lb> : ACTIVE (or gone with "gone")

@@ -33,7 +33,7 @@ set_members() {   # make the pool's members exactly the given addresses
   done <<< "$have"
   for ip in "$@"; do
     echo "$have" | grep -q " $ip\$" && continue
-    openstack loadbalancer member create --name "cp-$ip" --subnet-id private_subnet --address "$ip" --protocol-port 6443 "$POOL" >/dev/null; wait_lb
+    openstack loadbalancer member create --name "$(openstack server list --all-projects -f value -c Name -c Networks | grep -F "$ip" | head -1 | cut -d" " -f1)" --subnet-id private_subnet --address "$ip" --protocol-port 6443 "$POOL" >/dev/null; wait_lb
   done
 }
 

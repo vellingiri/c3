@@ -29,7 +29,7 @@ openstack loadbalancer flavor create --name ha --flavorprofile active-standby --
 openstack loadbalancer create --name finance-lb --vip-subnet-id private_subnet --flavor ha
 openstack loadbalancer listener create --name finance-http --protocol HTTP --protocol-port 80 --insert-headers X-Forwarded-For=true finance-lb
 openstack loadbalancer pool create --name finance-pool --lb-algorithm ROUND_ROBIN --listener finance-http --protocol HTTP
-openstack loadbalancer member create --name wN --subnet-id private_subnet --address <worker private IP> --protocol-port 30080 finance-pool   # once per worker (today w1 to w5)
+openstack loadbalancer member create --name workerN --subnet-id private_subnet --address <worker private IP> --protocol-port 30080 finance-pool   # once per worker (today w1 to w5)
 openstack loadbalancer healthmonitor create --name finance-hm --type HTTP --url-path /health --expected-codes 200 --delay 5 --timeout 3 --max-retries 3 finance-pool
 FIP=$(openstack floating ip create external_network -c floating_ip_address -f value)
 openstack floating ip set --port $(openstack loadbalancer show finance-lb -c vip_port_id -f value) $FIP
@@ -47,7 +47,7 @@ from `finance-lb` after DNS pointed at the new address.
 openstack loadbalancer create --name argo-lb --vip-subnet-id private_subnet     # no flavor = SINGLE (one amphora); --flavor ha = ACTIVE_STANDBY (what argo-lb uses now; a topology cannot be changed in place, see scripts/octavia-argo-lb-ha.sh for the swap)
 openstack loadbalancer listener create --name argo-http --protocol HTTP --protocol-port 80 --insert-headers X-Forwarded-For=true argo-lb
 openstack loadbalancer pool create --name argo-backend --lb-algorithm ROUND_ROBIN --listener argo-http --protocol HTTP
-openstack loadbalancer member create --name wN --subnet-id private_subnet --address <private ip> --protocol-port 30443 argo-backend   # per worker
+openstack loadbalancer member create --name workerN --subnet-id private_subnet --address <private ip> --protocol-port 30443 argo-backend   # per worker
 openstack loadbalancer healthmonitor create --name argo-backend-hm --type HTTP --url-path /healthz --expected-codes 200 --delay 5 --timeout 3 --max-retries 3 argo-backend
 FIP=$(openstack floating ip create external_network -c floating_ip_address -f value)
 openstack floating ip set --port $(openstack loadbalancer show argo-lb -c vip_port_id -f value) $FIP    # 192.168.2.113
@@ -100,8 +100,8 @@ so that it would not re-attach `.5`; that is no longer relevant.
 ## Workers change over time (pools are static)
 Octavia pools do not follow Kubernetes nodes. When a worker is added or retired, edit BOTH load balancers by hand (`finance-pool` on `finance-lb`, `argo-backend` on `argo-lb`):
 ```bash
-openstack loadbalancer member create --name wN --subnet-id private_subnet --address <private ip> --protocol-port 30080 finance-pool
-openstack loadbalancer member create --name wN --subnet-id private_subnet --address <private ip> --protocol-port 30443 argo-backend
+openstack loadbalancer member create --name workerN --subnet-id private_subnet --address <private ip> --protocol-port 30080 finance-pool
+openstack loadbalancer member create --name workerN --subnet-id private_subnet --address <private ip> --protocol-port 30443 argo-backend
 openstack loadbalancer member delete finance-pool wN   # and argo-backend, BEFORE draining/powering off a node
 ```
 History: `w4`, `w5` were added (and retired again the same day, after the node VMs were removed: their dead pool members were deleted by hand, `openstack loadbalancer member delete <pool> wN`, which Terraform does not manage); `w4`, `w5` added and the original `w1` retired on 2026-10-20, then a fresh `w1` (10.0.1.67) added the same day, so both pools hold `w1` to `w5` (drain with `--ignore-daemonsets --delete-emptydir-data`; the finance

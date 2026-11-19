@@ -37,6 +37,7 @@ def main():
         return out
 
     all_ips = {ip for s in servers for ip in ips(s)}
+    name_of = {ip: s.name for s in servers for ip in ips(s)}   # member name = the VM's name (controller1), so the label never goes stale
     subnet = conn.network.find_subnet("private_subnet")
     for lb in conn.load_balancer.load_balancers():
         m = re.fullmatch(r"(.+)-api", lb.name or "")
@@ -54,7 +55,14 @@ def main():
             if ip not in have:
                 log(f"{lb.name}: add member {ip}" + (" (dry run)" if DRY else ""))
                 if not DRY:
-                    conn.load_balancer.create_member(pool, name=f"cp-{ip}", address=ip, protocol_port=6443, subnet_id=subnet.id)
+                    conn.load_balancer.create_member(pool, name=name_of.get(ip, ip), address=ip, protocol_port=6443, subnet_id=subnet.id)
+                    conn.load_balancer.wait_for_load_balancer(lb.id, wait=120)
+        for ip in wanted:
+            mm = have.get(ip)
+            if mm is not None and mm.name != name_of.get(ip, ip):
+                log(f"{lb.name}: rename member {mm.name} -> {name_of.get(ip, ip)}" + (" (dry run)" if DRY else ""))
+                if not DRY:
+                    conn.load_balancer.update_member(mm, pool, name=name_of.get(ip, ip))
                     conn.load_balancer.wait_for_load_balancer(lb.id, wait=120)
         for ip, mm in have.items():
             if ip not in all_ips and len(have) > 1:
