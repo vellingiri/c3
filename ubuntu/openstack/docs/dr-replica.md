@@ -14,3 +14,6 @@ Warm standby of production (rdu, 13.140.58.46: docker compose in /opt/finance). 
 1. `ssh root@dr finance-dr-promote` stops the timer, makes a last pull if rdu answers (otherwise uses the last good copy), restores `.env.prod` and recreates the stack.
 2. Point whatever name users use at 192.168.2.80 (DNS or LB). Note `.env.prod` has COOKIE_SECURE unset (= Secure cookies): over plain http, set `COOKIE_SECURE=0` in `/opt/finance/.env` and `docker compose up -d backend`, or put TLS in front.
 3. Do not re-enable the timer afterwards: it would overwrite the DR copy with prod's data. Reverse the direction first.
+
+## DNS access from 192.168.0.0/24 (2026-11-19)
+c3 bind (/etc/bind/named.conf.options, edited by hand, not managed by Terraform) now lists 192.168.0.0/24 in allow-query, allow-query-cache and allow-recursion, next to 10.0.0.0/24, 192.168.1.0/24 and 192.168.2.0/24, so clients there can resolve dr.rdulinux.com. Backup of the previous file: /etc/bind/named.conf.options.bak-pre-dr-20261119. rndc has no control channel on c3 (connection refused on 127.0.0.1:953), so reload with: kill -HUP $(cat /run/named/named.pid). A rebuild of c3 must re-apply this edit. Routing from 192.168.0.0/24 and 192.168.1.0/24 to 192.168.2.0/24 is the router, not c3.
