@@ -116,7 +116,7 @@ for w in $WITNESS; do
   fi
 done
 # the S3 server (RustFS on `s3`) holds every Terraform state; without it nothing can be planned or applied (docs/s3-state-store.md)
-[ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' "$S3_HEALTH_URL" 2>/dev/null)" = 200 ] || problems+=("the state store (RustFS on the s3-prod VM, $S3_HEALTH_URL) is not answering: Terraform cannot read or write its states")
+[ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' "$S3_HEALTH_URL" 2>/dev/null)" = 200 ] || problems+=("the state store (RustFS on the s3 VM, $S3_HEALTH_URL) is not answering: Terraform cannot read or write its states")
 line=$(IFS=,; echo "${summary[*]}"); line=${line//,/, }   # "db1 primary, db2 replica, lag 0 bytes"
 echo "$(date -Is) $line"
 for p in "${problems[@]:-}"; do [ -n "$p" ] && echo "PROBLEM: $p"; done

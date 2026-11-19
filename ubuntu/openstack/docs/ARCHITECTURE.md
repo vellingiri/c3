@@ -34,15 +34,15 @@ Nodes talk over the private network; people and the load balancers use floating 
 | `db2` | 192.168.2.135 | 10.0.1.69 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **replica**) (m1.small) |
 | `dbw1` | floating IP per VM | 10.0.1.120 | the witness: etcd voter only, no data (m1.tiny); three voters with db1 and db2 (`dbw2`, `dbw3` existed 2026-10-20 to 2026-10-22) |
 | `db` | 192.168.2.124 (TTL 60) | n/a | alias of the current primary; edit `infra.yaml` to fail over |
-| `runner` | 192.168.2.144 | 10.0.1.47 | GitHub Actions self-hosted runner + the replication monitor (m1.large) |
+| `runner` | 192.168.2.83 | 10.0.1.190 | GitHub Actions self-hosted runner `finance-runner` (labels qa, finance) + the replication monitor (m1.medium-20g) |
 | `@`, `www`, `rdu` | 13.140.58.46 | n/a | public address (not a lab VM) |
 
 ### Kubernetes
 | Cluster | Zone | Nodes (floating / private IP) |
 |---|---|---|
-| **prod** | `prod.rdulinux.com` | `c1` .103 / 10.0.1.254, `c2` .72 / .25, `c3` .78 / .251 (three control-plane nodes behind the API load balancer `prod-api`, `api.prod.rdulinux.com`, `docs/k8s-ha-control-plane.md`), `w1` .52 / .67, `w2` .193 / .197, `w3` .139 / .45 (`w4` and `w5` were retired 2026-10-20; the cluster is now c1 + 3 workers) |
+| **prod** | `prod.rdulinux.com` | `controller1` .103 / 10.0.1.254, `controller2` .72 / .251, `controller3` .78 / .25 (three control-plane nodes behind the API load balancer `prod-api`, `api.prod.rdulinux.com`, `docs/k8s-ha-control-plane.md`; flavor `k8s.controller`), `worker1` .52 / .67, `worker2` .193 / .197, `worker3` .139 / .45 (`k8s.worker`). Rebuilt 2026-11-19 with these names and pod network `10.244.0.0/16` |
 | **qa** | `qa.rdulinux.com` | **destroyed 2026-10-22** to give memory back to `c3` (it ran only `ingress-nginx`; it had `c1` .120, `w1`, `w2`). Recreate: `terraform apply` in `environments/qa` (about 10 minutes, all from cloud-init); the zone `qa.rdulinux.com.` stays in `infra` |
-Kubernetes 1.30, Calico, pod CIDR `192.168.0.0/16`. Names have no environment prefix: `ssh c1-prod`, `ssh w2-qa`. Server names repeat across environments by design.
+Kubernetes 1.30, Calico, pod CIDR `10.244.0.0/16` in prod (cka and qa: `192.168.0.0/16` until rebuilt; that range overlaps the lab's floating network, pods cannot reach 192.168.2.x). Prod names have no environment suffix (`ssh controller1`, `ssh worker2`, `ssh db1`, `ssh runner`, `ssh s3`); cka and qa carry it (`ssh w2-cka`, `ssh w2-qa`).
 (Floating IPs here are the last octet of `192.168.2.x`.)
 
 ## How a request travels
@@ -88,7 +88,7 @@ nginx pods (3, one per node)  ->  /api -> backend (3)   /docs -> docs (3)   / ->
 ## Capacity update (2026-11-15)
 The memory ratio is now **1.2** (80,142 MB x 1.2 - 512 reserved = about 95,650 MB allocatable); CPU ratio 4.0 (32 threads, 128 vCPUs), disk 2.5. **Memory is the limit**, not CPU: 94,208 MB were allocated and a QA worker failed with `NoValidHost`.
 Stopped VMs (the four `cka` ones, 16 GB) still hold their allocation. A **resize on the same host needs the old and the new flavor at once**, so a shrink also fails when less than the new size is free ("No valid host found for resize"): free memory first (we replaced QA `c1`, which was empty).
-Sizes now: `db1-prod` and `db2-prod` 2 vCPU / 2 GB (flavor `m1.small-2g-20g`, created by hand 2026-11-15 with 20 GB disk because a disk cannot shrink; Postgres uses about 400 MB), QA `c1` 4 GB (`m1.small`). Allocated afterwards: 86,016 MB.
+Sizes now: `db1` and `db2` 2 vCPU / 2 GB (flavor `m1.small-2g-20g`, created by hand 2026-11-15 with 20 GB disk because a disk cannot shrink; Postgres uses about 400 MB), QA `c1` 4 GB (`m1.small`). Allocated afterwards: 86,016 MB.
 
 ## Capacity (as of 2026-10-20)
 The cloud is one host with 32 vCPUs and about 80 GB of memory. Nova allocates memory with a ratio of 1.1 (about 88 GB allocatable): **about 7.8 GB of allocatable memory was left**

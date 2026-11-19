@@ -10,7 +10,7 @@
 ## Result
 - `/` gets 65 GB free again (about 104 GB free, 25 % used).
 - A new filesystem of about 760 GB for the VMs: with ratio 2.5 Placement would offer about 1,900 GB. Consider lowering `disk_allocation_ratio` to 1.0 afterwards (thin qcow2 disks can then never overcommit the real disk); with 760 GB real space all current VMs (about 300 GB allocated) fit comfortably either way.
-- Then the remaining 10 GB VMs can be grown (cka x4: `m1.small-20g`; `dbw1-prod`: a tiny flavor with 20 GB) the same way as the others.
+- Then the remaining 10 GB VMs can be grown (cka x4: `m1.small-20g`; `dbw1`: a tiny flavor with 20 GB) the same way as the others.
 
 ## How
 **1. You create the partition and the filesystem (no downtime, nothing else is touched)** as root on c3:

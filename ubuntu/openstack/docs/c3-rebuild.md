@@ -26,7 +26,7 @@ captured every night** and re-creates what is not configuration (databases that 
 | NFS export and Samba share of `/share` (25 GB partition, the finance app tree incl. `.git`), `nmbd` fix | `/etc/exports`, `/etc/samba`, `/var/lib/samba` (users), the data from `backup:/backup/c3-dr/share/` (phase 7); the partition itself is made by hand (below) |
 | root's crontab: hourly/daily/weekly/monthly pull of the website data from the Contabo server into `/nfsshare/backups/rdulinux.com` (scripts live on the NFS share of `repo`) | `cron/root.crontab`, `/root/.ssh` keys, the `/nfsshare` mount from `/etc/fstab` (phase 3c, 7) |
 | `/root` (admin credentials in `.bashrc`, the Octavia work dir, `amphora-fix` scripts, the router config is no longer kept here: daily backups on `backup:/backup/openwrt/` (`docs/openwrt-router.md`), `firewall`) | `root.tgz`; the large amphora `.qcow2` files are mirrored on `backup` separately |
-| **Networks, router, security groups, key pair, DNS zones** | `terraform apply` in `infra/` (state is on the `s3-prod` VM, hourly snapshots on `backup`) |
+| **Networks, router, security groups, key pair, DNS zones** | `terraform apply` in `infra/` (state is on the `s3` VM, hourly snapshots on `backup`) |
 | **All VMs**: prod, qa, cka clusters, `db1` `db2` `dbw1-3`, `runner` | `terraform apply` in each environment; the database pair, etcd, Kubernetes control planes and workers **build themselves from cloud-init** (`db-ha-patroni.md`, `k8s-ha-control-plane.md`) |
 | **Load balancers** `finance-lb` (.5), `argo-lb` (.113), `prod-api` (.61), `cka-api` (.75) | `c3-dr-post.sh api-lbs` / `app-lbs`: same flavor, listeners, pools, health monitors and floating IPs as before |
 | Application data and the app layer in Kubernetes | see "Applications" below: this is the part that depends on other backups |
@@ -40,7 +40,7 @@ captured every night** and re-creates what is not configuration (databases that 
 | Finance database (PostgreSQL on `db1`/`db2`) | the live copy | hourly and daily `pg_dump` on the NFS share (`finance-db-restore.md`): **up to one hour of changes lost**. The replica is on the same host and does not help |
 | Kubernetes state (etcd) | yes | the app is declared in git and deployed by Argo CD; etcd snapshots on NFS (`etcd-restore-rehearsal.md`) are a fallback; secrets not in git must be recreated (see below) |
 | Uploads/logs/backups of the app | no | NFS on `repo` |
-| Terraform states, DR bundle, `/share` copy | no | `backup`, and the `s3-prod` VM for the live states (keep the `backup` copy safe) |
+| Terraform states, DR bundle, `/share` copy | no | `backup`, and the `s3` VM for the live states (keep the `backup` copy safe) |
 | OVN databases, Nova/Neutron/Octavia/Designate/Placement databases | yes | rebuilt from Terraform and the scripts |
 
 ## Keep it ready (do this before you need it)
@@ -68,15 +68,15 @@ Read the **phase 3b audit** (entries of the old `/etc` that were not restored: s
 **6. Application load balancers** (on `c3`, once the prod workers are `ACTIVE`): `./c3-dr-post.sh app-lbs` (finance-lb .5, argo-lb .113). `./c3-dr-post.sh check` shows both front doors.
 **7. Applications** (below). **8. Re-install the nightly capture and the monitors** (`scripts/install-c3-dr-capture.sh`, `scripts/install-ovn-vip-reconciler.sh` is already restored; the runner's monitor: `scripts/install-db-monitor.sh`).
 
-## When the state store is gone too (c3 lost, or only the `s3-prod` VM lost)
-The Terraform state lives in RustFS on the `s3-prod` VM, which is **inside** the cloud being rebuilt. Terraform cannot read the state that describes the VM that serves the state. Until that VM exists again, a **temporary RustFS on the backup host** (outside the cloud) serves a copy of the newest snapshot. Everything is in `scripts/s3-temp-store.sh`; run it from your Mac.
+## When the state store is gone too (c3 lost, or only the `s3` VM lost)
+The Terraform state lives in RustFS on the `s3` VM, which is **inside** the cloud being rebuilt. Terraform cannot read the state that describes the VM that serves the state. Until that VM exists again, a **temporary RustFS on the backup host** (outside the cloud) serves a copy of the newest snapshot. Everything is in `scripts/s3-temp-store.sh`; run it from your Mac.
 1. **Check the kit** (any time, read-only): `scripts/c3-rebuild-all.sh --dry-run --only backup-host` shows the `recovery kit:` lines (fresh snapshot with `terraform-state`, image tarball + checksum, `rustfs.env`, docker, port free). They are `OK` while this is ready.
 2. **Start the temporary store:** `scripts/s3-temp-store.sh start` (`--dry-run` first). It copies `/backup/rustfs-vm/latest` to `/opt/rustfs-temp/data` on the backup host (the snapshot itself is only read) and runs RustFS 1.0.2 on `192.168.2.4:9000` with the same keys as the VM, so `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` keep working. It lists the states it holds (serial, lineage).
-3. **Point the name at it.** Every backend and `terraform_remote_state` uses `http://s3-prod.rdulinux.com:9000`. On the machine that runs Terraform add one line (the script prints it): `192.168.2.4 s3-prod.rdulinux.com`. No code change. Then `terraform init -reconfigure` in each stack.
-4. **Rebuild** as in the steps above. In `environments/prod` create the VM first: `terraform apply -target='module.node["s3-prod"]'` (it is created from the new cloud; cloud-init installs RustFS with empty data). Every apply meanwhile writes the **new** state into the temporary store.
+3. **Point the name at it.** Every backend and `terraform_remote_state` uses `http://s3.rdulinux.com:9000`. On the machine that runs Terraform add one line (the script prints it): `192.168.2.4 s3.rdulinux.com`. No code change. Then `terraform init -reconfigure` in each stack.
+4. **Rebuild** as in the steps above. In `environments/prod` create the VM first: `terraform apply -target='module.node["s3"]'` (it is created from the new cloud; cloud-init installs RustFS with empty data). Every apply meanwhile writes the **new** state into the temporary store.
 5. **Hand back:** `scripts/s3-temp-store.sh handback --vm root@<the VM's address>`. It stops the temporary store cleanly, keeps its data as the snapshot `<time>-recovery`, restores that into the VM with `scripts/s3-vm-restore.sh`, and compares the states in the VM with the ones the temporary store held (they must be identical; otherwise it stops and nothing is lost).
-6. **Switch back:** remove the `/etc/hosts` line, make sure `s3-prod.rdulinux.com` resolves to the VM (DNS record from `infra`), `terraform init -reconfigure` and `terraform plan` in each stack: **no changes**. Then `scripts/s3-temp-store.sh stop --remove`.
-Only the VM lost (c3 fine): the same steps, except step 4 is just recreating the VM (`terraform apply -replace='module.node["s3-prod"]'` after step 3), and `handback` restores into it. If you do not need newer writes, `scripts/s3-vm-restore.sh` straight from a snapshot is also enough.
+6. **Switch back:** remove the `/etc/hosts` line, make sure `s3.rdulinux.com` resolves to the VM (DNS record from `infra`), `terraform init -reconfigure` and `terraform plan` in each stack: **no changes**. Then `scripts/s3-temp-store.sh stop --remove`.
+Only the VM lost (c3 fine): the same steps, except step 4 is just recreating the VM (`terraform apply -replace='module.node["s3"]'` after step 3), and `handback` restores into it. If you do not need newer writes, `scripts/s3-vm-restore.sh` straight from a snapshot is also enough.
 Trap: do not restore the **old** snapshot over the VM after the rebuild has written to the temporary store; those writes would be lost. `handback` restores from the temporary store's data for that reason. While the override line exists, `c3-rebuild-all.sh` warns in its terraform stages. Rehearse `start`, `status`, `stop --remove` once when nothing is at stake.
 
 ## Applications (the part that is not just "restore the config")

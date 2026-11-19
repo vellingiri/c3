@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Give a Kubernetes node its NEW name (the hostname of its renamed VM, e.g. w1 -> w1-prod) by taking it out of the cluster and joining it again.
+# Give a Kubernetes node its NEW name (the hostname of its renamed VM, e.g. w1 -> worker1) by taking it out of the cluster and joining it again.
 # Kubernetes cannot rename a node (client certificate, Node object, etcd member and static pod names carry the name), so the node leaves and comes back.
 # The VM, its address, disk and containers images stay; only the cluster membership is redone. One node per run, never in parallel.
 #
-#   scripts/k8s-rejoin-node.sh <env> <current node name>        e.g.  scripts/k8s-rejoin-node.sh prod w1        (it joins as w1-prod)
+#   scripts/k8s-rejoin-node.sh <env> <current node name>        e.g.  scripts/k8s-rejoin-node.sh prod w1        (it joins as worker1)
 #
 # Worker:         cordon + drain (its pods go to the other workers; a pod that cannot move, for example because each app already runs on every worker,
 #                 waits Pending until the node is back), delete the node, `kubeadm reset`, join with the worker join command published on the NFS share.

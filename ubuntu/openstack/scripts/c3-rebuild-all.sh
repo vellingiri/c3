@@ -214,7 +214,7 @@ stage_preflight() {
   command -v crudini >/dev/null 2>&1 && ok "tool crudini" || info "crudini is missing (the platform stage installs it; --apply installs it before editing config files)"
   command -v terraform >/dev/null 2>&1 && ok "terraform $(terraform version 2>/dev/null | head -1)" || warn "terraform is not installed (the tf-* stages need it)"
   [ -r /etc/keystonerc ] && ok "/etc/keystonerc present (admin credentials)" || info "/etc/keystonerc not there yet (comes with the bundle, platform stage)"
-  [ -n "${AWS_ACCESS_KEY_ID:-}" ] && ok "AWS_ACCESS_KEY_ID is set (the Terraform state on s3-prod)" || warn "AWS_ACCESS_KEY_ID is not set: the tf-* stages cannot reach the state store on s3"
+  [ -n "${AWS_ACCESS_KEY_ID:-}" ] && ok "AWS_ACCESS_KEY_ID is set (the Terraform state on s3)" || warn "AWS_ACCESS_KEY_ID is not set: the tf-* stages cannot reach the state store on s3"
   if [ -n "$BUNDLE" ]; then
     if [ -r "$BUNDLE/MANIFEST" ] && (cd "$BUNDLE" && sha256sum -c --quiet SHA256SUMS 2>/dev/null); then ok "bundle $BUNDLE: checksums OK, $(grep -m1 '^date:' "$BUNDLE/MANIFEST" | cut -d' ' -f2)"; else fail "bundle $BUNDLE is missing, unreadable or its checksums do not match"; fi
   elif [ "$MODE" = apply ]; then
@@ -347,11 +347,11 @@ tf_stage() {   # tf_stage NAME DIR
   stage "$name" "terraform in $dir (dry run = plan without a lock, nothing is written)"
   [ -d "$d" ] || { skip "no $d (--tf-repo)"; return; }
   command -v terraform >/dev/null 2>&1 || { skip "terraform is not installed"; return; }
-  grep -Eq '^[^#]*[[:space:]]s3-prod\.rdulinux\.com' /etc/hosts 2>/dev/null && warn "/etc/hosts overrides s3.rdulinux.com: Terraform here uses a TEMPORARY state store (scripts/s3-temp-store.sh status)"
+  grep -Eq '^[^#]*[[:space:]]s3\.rdulinux\.com' /etc/hosts 2>/dev/null && warn "/etc/hosts overrides s3.rdulinux.com: Terraform here uses a TEMPORARY state store (scripts/s3-temp-store.sh status)"
   is_git "$TF_REPO" || info "no git metadata in $TF_REPO: newest file in $dir is from $(ls -t "$d"/*.tf "$d"/nodes.yaml 2>/dev/null | head -1 | xargs -r stat -c %y | cut -c1-10); a plan from an old copy can show changes that are not real (run Terraform from the Mac, or sync the repo first)"
   if [ "$dir" = environments/prod ] && [ ! -e "$d/secrets.auto.tfvars" ]; then
     skip "$dir needs $d/secrets.auto.tfvars (git-ignored; scripts/db-ha-secrets.sh makes it from the live Patroni config): not planning (terraform would ask for the database password)"; return; fi
-  [ -n "${AWS_ACCESS_KEY_ID:-}" ] || { skip "AWS_ACCESS_KEY_ID is not set: cannot read the state on s3-prod"; return; }
+  [ -n "${AWS_ACCESS_KEY_ID:-}" ] || { skip "AWS_ACCESS_KEY_ID is not set: cannot read the state on s3"; return; }
   if [ ! -d "$d/.terraform" ]; then drift "$dir is not initialised"; act "terraform init" terraform -chdir="$d" init -input=false; [ "$MODE" = dry ] && { info "plan skipped in a dry run until the directory is initialised"; return; }; fi
   if [ "$MODE" = dry ]; then
     local out rc planlog="$LOG_DIR/plan-$name-$RUN_ID.txt"
@@ -411,11 +411,11 @@ stage_apps() {
 }
 
 stage_backup_host() {
-  stage backup-host "the backup host: state and router backups, the pull of the s3-prod store (formerly the s3 host)"
+  stage backup-host "the backup host: state and router backups, the pull of the s3 store (formerly the s3 host)"
   if ! rssh root@192.168.2.4 true 2>/dev/null; then warn "cannot ssh to root@192.168.2.4 (backup)"; return; fi
   ok "ssh to backup works"
-  # RustFS (the Terraform state store) runs on the s3-prod VM since 2026-11-15; this host keeps the backups and the timers (docs/s3-state-store.md)
-  rssh root@s3.rdulinux.com 'docker ps --format "{{.Names}} {{.Status}}" | grep -q "^rustfs "' && ok "RustFS container is running on s3-prod" || drift "RustFS container is not running on s3-prod (scripts/s3-vm-restore.sh)"
+  # RustFS (the Terraform state store) runs on the s3 VM since 2026-11-15; this host keeps the backups and the timers (docs/s3-state-store.md)
+  rssh root@s3.rdulinux.com 'docker ps --format "{{.Names}} {{.Status}}" | grep -q "^rustfs "' && ok "RustFS container is running on s3" || drift "RustFS container is not running on s3 (scripts/s3-vm-restore.sh)"
   [ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://s3.rdulinux.com:9000/health)" = 200 ] && ok "RustFS health 200" || drift "RustFS health is not 200"
   local t; for t in tfstate-backup.timer rustfs-vm-pull.timer openwrt-backup.timer; do
     if rssh root@192.168.2.4 "systemctl is-active $t" | grep -q '^active$'; then ok "backup timer $t is active"
@@ -425,7 +425,7 @@ stage_backup_host() {
   age=$(rssh root@192.168.2.4 'echo $(( ($(date +%s) - $(stat -c %Y /backup/openwrt/last-ok)) / 3600 ))' 2>/dev/null)
   [ -n "$age" ] && { [ "$age" -lt 50 ] && ok "router backup job ran $age h ago" || drift "router backup job last ran $age h ago (should be under 2 days)"; }
   age=$(rssh root@192.168.2.4 'echo $(( ($(date +%s) - $(stat -c %Y /backup/rustfs-vm/last-ok)) / 60 ))' 2>/dev/null)
-  [ -n "$age" ] && { [ "$age" -lt 150 ] && ok "whole-store pull of s3-prod ran $age min ago" || drift "whole-store pull of s3-prod last ran $age min ago (should be under 2 hours)"; }
+  [ -n "$age" ] && { [ "$age" -lt 150 ] && ok "whole-store pull of s3 ran $age min ago" || drift "whole-store pull of s3 last ran $age min ago (should be under 2 hours)"; }
   # The recovery kit for "the state store is gone too" (scripts/s3-temp-store.sh, docs/c3-rebuild.md): everything a temporary RustFS on this host needs
   local kit; kit=$(rssh root@192.168.2.4 'L=$(readlink /backup/rustfs-vm/latest 2>/dev/null); [ -n "$L" ] && [ -d "/backup/rustfs-vm/$L/terraform-state" ] && echo snap=$L; cd /backup/rustfs-vm-config 2>/dev/null && [ -s rustfs-1.0.2-image.tar ] && sha256sum -c --quiet rustfs-1.0.2-image.tar.sha256 2>/dev/null && echo image; [ -s /backup/rustfs-vm-config/rustfs.env ] && echo env; command -v docker >/dev/null && echo docker; ss -tln | grep -q "192.168.2.4:9000 " && echo portbusy; [ -e /opt/rustfs-temp/data ] && echo oldtemp' 2>/dev/null)
   case "$kit" in *snap=*) ok "recovery kit: newest whole-store snapshot has terraform-state ($(echo "$kit" | sed -n 's/^snap=//p'))" ;; *) drift "recovery kit: no usable /backup/rustfs-vm/latest with terraform-state (the hourly pull: rustfs-vm-pull.timer)" ;; esac

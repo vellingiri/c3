@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Restore the RustFS store on the s3-prod VM from a snapshot held on the backup box (`s3`, /backup/rustfs-vm/<timestamp>/). Run from your Mac.
+# Restore the RustFS store on the s3 VM from a snapshot held on the backup box (`s3`, /backup/rustfs-vm/<timestamp>/). Run from your Mac.
 #   scripts/s3-vm-restore.sh --list                 # the snapshots there are
 #   scripts/s3-vm-restore.sh --dry-run              # say what would happen, change nothing
 #   scripts/s3-vm-restore.sh                        # restore the newest snapshot

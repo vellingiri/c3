@@ -4,6 +4,24 @@ What changed in the lab infrastructure, newest first. One entry per day that mat
 what bites later. The matching app-side changes are in the finance repo (`docs/RELEASE_NOTES.md`, [PR 309](https://github.com/vellingiri/finance/pull/309)). Design background: `docs/`.
 Update this file in the same commit as any change, and list anything done **by hand** (not in Terraform) under "Not in Terraform".
 
+## 2026-11-19 — prod rebuilt with plain names, Rancher added, state store and runner recreated
+
+**Breaking changes**
+- **Prod VM names lose the `-prod` suffix.** Kubernetes nodes are `controller1..3` and `worker1..3`; `db1`, `db2`, `dbw1`, `runner`, `s3`, `rancher`. cka and qa keep `<role><n>-<env>` (`c1-cka`, `w1-qa`). The OpenStack host stays `c3`; never rename it (`controller3` exists because `c3.rdulinux.com` is the host).
+- **The Terraform state store is `s3` (`s3.rdulinux.com`, 192.168.2.98), not `s3-prod`.** All four backends and remote-state blocks, the backup jobs on the backup box and the monitor were switched; `s3-prod` was deleted.
+- **Prod pod network is `10.244.0.0/16`** (was `192.168.0.0/16`, which overlapped the floating network: pods could not reach 192.168.2.x). cka still has the old range.
+- Control-plane flavor is `k8s.controller` (2 vCPU, 4 GB, 20 GB); `m1.small-20g` stays for the state store.
+
+**What was done**
+- `environments/prod/nodes.yaml`: the VMs above, new role `mgmt` (Rancher), `moved.tf` blocks for the old keys removed. Replacement was by `terraform state mv` + `apply -replace`, one VM at a time: `dbw1`, `db2`, `db1` (switchover first), the six Kubernetes nodes (with new pod network; database dumps, etcd snapshot and secrets saved first), then `s3`, `runner`, with every old VM deleted afterwards.
+- Rancher v2.15.3 (single-node K3s on `rancher`, `rancher.rdulinux.com`) manages prod and cka. cka's agent still carries one hosts entry (pod range overlap) until cka is rebuilt.
+- Load-balancer members are named after their VMs (`worker1`, `controller1`); the API reconciler on c3 names and renames members by VM name.
+- `s3` runs RustFS from `/opt/rustfs/compose.yaml`; `s3-vm-restore.sh` installs the compose plugin and sets `RUSTFS_BIND_IP` to the VM's address; the kit on the backup box has the compose file.
+- Scripts that order VMs (`env-vms.py`, `c3-vms-start.sh`, `c3-vms-stop.sh`) know the new names; docs updated.
+
+**Not in Terraform (done by hand)**: K3s and Rancher installation (Helm), importing the clusters into Rancher, Patroni switchovers, restoring ArgoCD and the finance secrets on the new cluster, kubeconfigs (c3, the runner VM, the laptop), the GitHub runner registration and its copied ssh key, an Octavia database reset of `argo-lb`'s stuck `PENDING_UPDATE` and a failover of `prod-api`.
+- Lesson: OpenStack counts stopped VMs against its RAM limit, and c3 ran out of real memory while a VM was being configured (cka `c1`/`w1` were stopped to relieve it).
+
 ---
 
 

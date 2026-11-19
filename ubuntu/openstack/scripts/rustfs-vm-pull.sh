@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pull the RustFS data directory of the s3-prod VM to this machine (the backup box, formerly `s3`): dated, hard-linked snapshots under
+# Pull the RustFS data directory of the s3 VM to this machine (the backup box, formerly `s3`): dated, hard-linked snapshots under
 # /backup/rustfs-vm/<timestamp>/ (so 200 hourly copies of a 14 MB store cost a few MB), a `latest` link and a `last-ok` marker.
 # Installed as /usr/local/sbin/rustfs-vm-pull by scripts/install-rustfs-vm-pull.sh and run hourly by rustfs-vm-pull.timer.
 # Read-only on the VM: the key can only run `rrsync -ro /opt/rustfs` (restrict in the VM's authorized_keys), so nothing here can change or delete

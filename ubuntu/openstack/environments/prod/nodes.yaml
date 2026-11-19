@@ -14,7 +14,7 @@ defaults:
   security_group_ids:
     - f00e0d86-c4f7-492d-893d-dab70cf732be  # default
     - 80068ced-6e70-4977-aa86-3ae9b40d3c4e  # k8s
-  domain: rdulinux.com     # names carry the environment since 2026-10-22: c1-prod.rdulinux.com ...
+  domain: rdulinux.com     # prod uses plain role names (controller1, worker1, db1, runner, s3, rancher); cka and qa carry the environment (c1-cka, w1-qa)
   vars:
     dns_server: 192.168.2.2
     nfs_server: repo.rdulinux.com
@@ -37,16 +37,15 @@ nodes:
   dbw1: { role: witness, member: dbw1, ip: 10.0.1.120, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
   # dbw2, dbw3: two more witnesses were added on 2026-10-20 (5 etcd voters) and REMOVED on 2026-10-22 to save memory on c3 (3 voters again).
   # They left etcd first (scripts/db-ha-etcd-shrink.sh); to bring them back uncomment them, run scripts/db-ha-etcd-grow.sh firewall, apply.
-  #dbw2-prod: { role: witness, ip: 10.0.1.121, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
-  #dbw3-prod: { role: witness, ip: 10.0.1.122, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
-  # s3-prod: the RustFS S3 server that holds every Terraform state (docs/s3-state-store.md). It moved here from the desktop machine `s3`, which now
-  # only holds the off-host backups. role objstore is never stopped by scripts/env-vms.py: Terraform cannot read or write any state while it is off.
-  # 2026-11-19: the plain-named replacement of s3-prod; the store is restored onto it, the backends switched, then s3-prod is retired (docs/s3-state-store.md).
+  #dbw2: { role: witness, ip: 10.0.1.121, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
+  #dbw3: { role: witness, ip: 10.0.1.122, flavor: m1.tiny, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }
+  # s3: the RustFS S3 server (docker compose in /opt/rustfs) that holds every Terraform state (docs/s3-state-store.md). The old desktop machine is now `backup`
+  # (off-host copies only). role objstore is never stopped by scripts/env-vms.py: Terraform cannot read or write any state while it is off.
   s3: { role: objstore, flavor: m1.small-20g, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"] }  # default SG only
   # runner has default + k8s SGs, which equal the defaults, so no override needed.
-  runner: { role: runner, flavor: m1.medium-20g, domain: rdulinux.com }   # 2026-11-19: plain-named replacement of ci1-prod (the GitHub Actions runner finance-runner)
+  runner: { role: runner, flavor: m1.medium-20g, domain: rdulinux.com }   # the GitHub Actions runner `finance-runner` (labels qa, finance) and the DB replication monitor; recreated 2026-11-19 with its plain name
 
-  # Kubernetes cluster. VM names are <role><n>-<env> (c1-prod); the environment is also a tag/metadata.
+  # Kubernetes cluster. VM names are controller1..3 and worker1..3 (no environment suffix in prod); the environment is a tag/metadata.
   controller1: { role: controller_join, flavor: k8s.controller }
   # control-plane nodes 2 and 3 (2026-10-20): join through api.prod.rdulinux.com by themselves and are added to the load balancer prod-api by the reconciler on c3;
   # c3 waits 5 minutes so etcd takes one member at a time. m1.small: the host's RAM allocation limit is the constraint (docs/k8s-ha-control-plane.md).

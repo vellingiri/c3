@@ -29,7 +29,7 @@ PGV=16
 export ETCDCTL_API=3
 
 # Who am I? By ADDRESS, not by hostname: the group's member names (db1, db2, dbw1 = the etcd member and Patroni names) are logical names and are not the
-# VM's hostname since the VMs were called db1-prod, db2-prod ... (2026-10-22); the address is what MEMBERS pairs with each name.
+# VM's hostname since the VMs were called db1, db2 ... (2026-10-22); the address is what MEMBERS pairs with each name.
 member_ip() { echo "$MEMBERS" | tr ',' '\n' | awk -F= -v n="$1" '$1==n{print $2}'; }
 ME=""; MYIP=""
 for pair in $(echo "$MEMBERS" | tr ',' ' '); do

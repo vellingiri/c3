@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the old s3 host's RustFS and the s3-prod VM's RustFS comparable, and say so. Run from your Mac. Each direction is explicit, so a stale copy can never
+# Keep the old s3 host's RustFS and the s3 VM's RustFS comparable, and say so. Run from your Mac. Each direction is explicit, so a stale copy can never
 # overwrite the live store by accident.
 #   scripts/s3-vm-migrate.sh --check        # compare both stores object by object, version by version (read-only; always safe)
 #   scripts/s3-vm-migrate.sh --old-to-vm    # BEFORE the switch only: re-copy old -> VM, then compare

@@ -43,7 +43,7 @@ systemctl start octavia-health-manager 2>/dev/null && echo "octavia-health-manag
 rm -f /tmp/vm-ids.$$ /tmp/vm-todo.$$
 cat <<'T'
 Checks (a minute or two after the VMs are up):
-  ssh db1-prod patronictl -c /etc/patroni/config.yml list          # one Leader, one Sync Standby, lag 0
+  ssh db1 patronictl -c /etc/patroni/config.yml list          # one Leader, one Sync Standby, lag 0
   kubectl get nodes                                              # all Ready (control planes need a few minutes)
   curl -s -o /dev/null -w '%{http_code}\n' http://finance.rdulinux.com/health    # 200
   openstack loadbalancer list                                    # ONLINE (cka-api stays in ERROR while cka is off)

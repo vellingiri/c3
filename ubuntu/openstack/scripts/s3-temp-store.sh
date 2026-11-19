@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A TEMPORARY Terraform state store, for the one situation where the real one is gone: the RustFS on the `s3-prod` VM, which lives INSIDE the cloud
+# A TEMPORARY Terraform state store, for the one situation where the real one is gone: the RustFS on the `s3` VM, which lives INSIDE the cloud
 # it describes. Terraform cannot read its state to create the VM that serves its state, so for a while another RustFS serves it: this one, started
 # on the backup host (192.168.2.4, outside the cloud) from the newest whole-store snapshot there. Procedure and reasons: docs/c3-rebuild.md,
 # "When the state store is gone too", and docs/s3-state-store.md.
@@ -7,7 +7,7 @@
 #   s3-temp-store.sh status                          is it running, which states does it hold (serial, lineage), is a hosts override active HERE
 #   s3-temp-store.sh start [SNAPSHOT] [--dry-run]    copy the newest (or a named) snapshot of /backup/rustfs-vm to /opt/rustfs-temp/data and run RustFS 1.0.2
 #                                                    on 192.168.2.4:9000 with the same keys as the VM (so AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY keep working)
-#   s3-temp-store.sh handback --vm root@IP [--dry-run]   after the s3-prod VM exists again (terraform apply -target in environments/prod): stop the
+#   s3-temp-store.sh handback --vm root@IP [--dry-run]   after the s3 VM exists again (terraform apply -target in environments/prod): stop the
 #                                                    temporary store, keep its data as a new snapshot <time>-recovery on the backup host, restore THAT into
 #                                                    the VM (scripts/s3-vm-restore.sh), and check the VM holds exactly the same states
 #   s3-temp-store.sh stop [--remove]                 stop the temporary store (--remove also sets its data aside)
@@ -92,13 +92,13 @@ NEXT (on the machine that runs Terraform: your Mac, or c3):
        echo "$IP $HOSTNAME_S3   # TEMPORARY state store (scripts/s3-temp-store.sh)" | sudo tee -a /etc/hosts
      (macOS: sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder)
   2. in each stack:  terraform init -reconfigure     (same bucket and key, the name now resolves to the temporary store)
-  3. rebuild as in docs/c3-rebuild.md; create the VM first:  cd environments/prod && terraform apply -target='module.node["s3-prod"]'
+  3. rebuild as in docs/c3-rebuild.md; create the VM first:  cd environments/prod && terraform apply -target='module.node["s3"]'
   4. when the VM is up:  scripts/s3-temp-store.sh handback --vm root@<its address>
 EOF
   ;;
 handback)
   [ -n "$vm" ] || die "give the new VM: --vm root@<address>   (its address, NOT the name: the name still points at the temporary store)"
-  say "hand the state back to the s3-prod VM ($vm)"
+  say "hand the state back to the s3 VM ($vm)"
   box "docker ps --format '{{.Names}}' | grep -q '^$NAME$'" || die "the temporary store is not running (status)"
   ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$vm" 'systemctl is-active docker' </dev/null | grep -q active || die "cannot reach $vm over ssh, or docker is not running there (is cloud-init finished?)"
   stamp=$(date +%Y%m%d-%H%M%S); new="$stamp-recovery"
@@ -120,7 +120,7 @@ handback)
 
 NEXT:
   1. remove the override on the machine(s) that had it:   sudo sed -i.bak '/$HOSTNAME_S3/d' /etc/hosts     (macOS: sed -i '' ... ; flush the DNS cache)
-  2. the name must now reach the VM (DNS record s3-prod -> its floating IP, made by terraform apply in infra):  dig +short $HOSTNAME_S3 @192.168.2.2
+  2. the name must now reach the VM (DNS record s3 -> its floating IP, made by terraform apply in infra):  dig +short $HOSTNAME_S3 @192.168.2.2
   3. in each stack:  terraform init -reconfigure ; terraform plan   (no changes expected)
   4. clean up:  scripts/s3-temp-store.sh stop --remove     (the data stays in $SNAPS/$new as a snapshot too)
 EOF

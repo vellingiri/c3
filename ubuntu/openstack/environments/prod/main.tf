@@ -17,7 +17,7 @@ locals {
         startswith(g, "@") ? local.sg_by_name[trimprefix(g, "@")] : g
       ]
       private_ip = try(n.ip, null)
-      # logical name of a database-group member (etcd member / Patroni member), independent of the VM's name: db1-prod is the VM, db1 the member
+      # logical name of a database-group member (etcd member / Patroni member), independent of the VM's name: db1 is the VM, db1 the member
       member     = try(n.member, name)
       domain     = try(n.domain, local.defaults.domain)
       manage_dns = try(n.manage_dns, true)

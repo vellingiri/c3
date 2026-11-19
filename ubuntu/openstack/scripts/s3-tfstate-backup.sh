@@ -6,11 +6,11 @@
 # The access keys are read from the running container's environment at run time, never stored or printed.
 set -euo pipefail
 BUCKET=terraform-state
-ENDPOINT=http://s3.rdulinux.com:9000   # the s3-prod VM since 2026-11-15; before that http://192.168.2.4:9000 (docs/s3-state-store.md)
+ENDPOINT=http://s3.rdulinux.com:9000   # the s3 VM since 2026-11-15; before that http://192.168.2.4:9000 (docs/s3-state-store.md)
 DEST=/backup/terraform-state
 KEEP=300
 
-# After the store moved to the s3-prod VM (docs/s3-state-store.md) there is no local container to read the keys from: /etc/tfstate-backup.env (root, mode 600)
+# After the store moved to the s3 VM (docs/s3-state-store.md) there is no local container to read the keys from: /etc/tfstate-backup.env (root, mode 600)
 # then sets ENDPOINT, AK and SK. Without that file nothing changes: the endpoint above and the keys of the local `rustfs` container, as before.
 [ -r /etc/tfstate-backup.env ] && . /etc/tfstate-backup.env
 if [ -z "${AK:-}" ] || [ -z "${SK:-}" ]; then

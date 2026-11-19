@@ -21,7 +21,7 @@ All documents were checked against the live system on 2026-10-20; each says what
 | build, use or throw away the CKA practice cluster (1 control plane + 3 workers) | [cka-cluster.md](cka-cluster.md) |
 | understand or undo the route that lets `c3` reach private VM addresses | [c3-host-route.md](c3-host-route.md) |
 | understand or operate the three-node Kubernetes control plane and its API load balancer | [k8s-ha-control-plane.md](k8s-ha-control-plane.md) |
-| the Terraform state store (RustFS on the `s3-prod` VM), the `backup` host that keeps its copies, and how to restore | [s3-state-store.md](s3-state-store.md) |
+| the Terraform state store (RustFS on the `s3` VM), the `backup` host that keeps its copies, and how to restore | [s3-state-store.md](s3-state-store.md) |
 | naming of VMs (`<role><n>-<env>`), renaming one in place | [cka-cluster.md](cka-cluster.md) ("Names") |
 | rebuild `c3` and everything on it from nothing (disaster recovery) | [c3-rebuild.md](c3-rebuild.md) |
 | see what is still open, waiting for a decision, or an accepted limit | [pending.md](pending.md) |

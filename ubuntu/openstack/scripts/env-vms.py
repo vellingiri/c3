@@ -5,12 +5,12 @@
     scripts/env-vms.py prod stop  [--lbs] [--dry-run] [--confirm]
     scripts/env-vms.py prod start [--all] [--lbs] [--dry-run] [--no-cleanup]
 
-    scripts/env-vms.py prod status w1-prod            one or more named servers instead of the whole environment
-    scripts/env-vms.py prod start  w1-prod w2-prod    starts exactly those (if SHUTOFF), whatever the last `stop` saved
-    scripts/env-vms.py prod stop   w3-prod            stops exactly that one
+    scripts/env-vms.py prod status worker1            one or more named servers instead of the whole environment
+    scripts/env-vms.py prod start  worker1 worker2    starts exactly those (if SHUTOFF), whatever the last `stop` saved
+    scripts/env-vms.py prod stop   worker3            stops exactly that one
 
 Run it from your Mac. It reaches OpenStack through `ssh c3` (the admin credentials are in /root/.bashrc there) and the cluster/database
-through your usual kubeconfig (~/.kube/<env>, context <env>) and ssh names (db1-prod ...). Nothing is installed anywhere.
+through your usual kubeconfig (~/.kube/<env>, context <env>) and ssh names (db1 ...). Nothing is installed anywhere.
 
 Which VMs: those whose Nova metadata says env=<env> (Terraform sets `env` and `role` on every node). The Octavia amphorae (the load balancers) carry no
 env, so by default they are not touched: the load balancers stay up and only mark their members down while the VMs are off. With `--lbs` the amphorae of
@@ -49,11 +49,11 @@ START_TIER_TIMEOUT = 300
 FRONT_DOOR = {"prod": "http://finance.rdulinux.com/health"}
 
 # stop order: smaller first. Start is the reverse.
-# Roles that are never stopped or started by this script, even though they carry env=<env>. The S3 server (s3-prod) is the Terraform state store: while it
+# Roles that are never stopped or started by this script, even though they carry env=<env>. The S3 server (s3) is the Terraform state store: while it
 # is off, no `terraform plan` or `apply` in any stack can read or write its state, and the tfstate backups have nothing to copy.
 NEVER_STOP_ROLES = {"objstore"}
 RANK = {"mgmt": 1, "runner": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
-RANK_NAME = {1: "runner / management (rancher-prod)", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
+RANK_NAME = {1: "runner / management (rancher)", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
 # The Octavia load balancers that belong to each environment (their amphorae are the VMs `--lbs` stops and starts). Override: ENV_LBS="prod=finance-lb,argo-lb,prod-api;cka=cka-api"
 ENV_LBS = {"prod": ["finance-lb", "argo-lb", "prod-api"], "cka": ["cka-api"]}
 if os.environ.get("ENV_LBS"):
