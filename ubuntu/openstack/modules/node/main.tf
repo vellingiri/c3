@@ -11,6 +11,7 @@ locals {
     learn      = ["base", "learn"]
     witness    = ["base", "db-ha", "witness"] # third etcd voter for the database pair
     mgmt       = ["base"]            # management plane VM (Rancher): plain Ubuntu, K3s and Rancher are installed on top by hand/Helm
+    app        = ["base", "app"]              # DR replica of the finance app: docker compose + Apache, pulled from prod hourly (docs/dr-replica.md)
     objstore   = ["base", "objstore"]         # RustFS: the S3 server that holds every Terraform state (docs/s3-state-store.md)
   }
 
