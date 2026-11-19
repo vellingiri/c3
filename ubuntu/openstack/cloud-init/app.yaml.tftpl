@@ -34,8 +34,8 @@ write_files:
 
       # 3. database: dump to a file first and check it reads before touching the running copy
       $S dump > $W/dump.new
+      docker compose up -d db; sleep 10
       docker exec -i finance-db-1 pg_restore -l < $W/dump.new > /dev/null
-      docker compose up -d db
       docker compose stop backend || true
       docker exec finance-db-1 sh -c 'dropdb -U $POSTGRES_USER --if-exists --force $POSTGRES_DB && createdb -U $POSTGRES_USER $POSTGRES_DB'
       docker exec -i finance-db-1 sh -c 'pg_restore -U $POSTGRES_USER -d $POSTGRES_DB --no-owner --exit-on-error' < $W/dump.new
@@ -92,31 +92,19 @@ write_files:
     content: |
       <VirtualHost *:80>
           ServerName ${app_fqdn}
-          RewriteEngine On
-          RewriteRule ^ https://${app_fqdn}/ [R=301,L]
-      </VirtualHost>
-      <VirtualHost *:443>
-          ServerName ${app_fqdn}
-          SSLEngine on
-          SSLCertificateFile    /etc/ssl/finance-dr/fullchain.pem
-          SSLCertificateKeyFile /etc/ssl/finance-dr/privkey.pem
-          Header always set X-Content-Type-Options "nosniff"
           ProxyPreserveHost On
           # nginx in the stack answers only to the production names, so present one of them
           RequestHeader set Host "yourassets.in"
-          RequestHeader set X-Forwarded-Proto "https"
           ProxyPass / http://127.0.0.1:8080/
           ProxyPassReverse / http://127.0.0.1:8080/
       </VirtualHost>
 
 runcmd:
-  - 'for i in 1 2 3 4 5; do DEBIAN_FRONTEND=noninteractive apt-get install -y -o DPkg::Lock::Timeout=120 docker.io docker-compose-v2 apache2 rsync jq openssl && break; sleep 20; done'
+  - 'for i in 1 2 3 4 5; do DEBIAN_FRONTEND=noninteractive apt-get install -y -o DPkg::Lock::Timeout=120 docker.io docker-compose-v2 apache2 rsync jq && break; sleep 20; done'
   - systemctl enable --now docker
-  - mkdir -p /opt/finance /var/lib/finance-dr /var/log/finance /etc/ssl/finance-dr
+  - mkdir -p /opt/finance /var/lib/finance-dr /var/log/finance
   - 'test -f /root/.ssh/dr-pull || ssh-keygen -q -t ed25519 -N "" -C finance-dr-pull -f /root/.ssh/dr-pull'
-  - 'openssl req -x509 -nodes -newkey rsa:2048 -days 825 -subj "/CN=${app_fqdn}" -addext "subjectAltName=DNS:${app_fqdn}" -keyout /etc/ssl/finance-dr/privkey.pem -out /etc/ssl/finance-dr/fullchain.pem'
-  - chmod 600 /etc/ssl/finance-dr/privkey.pem
-  - a2enmod ssl proxy proxy_http headers rewrite
+  - a2enmod proxy proxy_http headers
   - a2dissite 000-default || true
   - a2ensite finance-dr
   - systemctl restart apache2
