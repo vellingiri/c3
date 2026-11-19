@@ -1,7 +1,7 @@
-# QA environment. VM names never contain the environment (it is a tag/metadata).
-# DNS names stay unique through the domain: c1.qa.rdulinux.com (prod is c1.rdulinux.com).
+# QA environment. Names: <role><n>-<env> (c1-qa, w1-qa), DNS c1-qa.rdulinux.com, the same scheme as prod and cka.
+# Renamed 2026-11-18: QA was destroyed and rebuilt with these names (a rename in place does not change the hostname baked into cloud-init).
 
-environment: qa   # tag/metadata on every resource; never part of a VM name
+environment: qa   # tag/metadata on every resource. Like prod and cka, the environment is also part of the VM NAME (<role><n>-<env>)
 
 defaults:
   image: ubuntu2404
@@ -10,7 +10,7 @@ defaults:
   security_group_ids:
     - f00e0d86-c4f7-492d-893d-dab70cf732be  # default
     - 80068ced-6e70-4977-aa86-3ae9b40d3c4e  # k8s
-  domain: qa.rdulinux.com
+  domain: rdulinux.com    # names carry the environment (c1-qa), so the DNS name is c1-qa.rdulinux.com, not c1.qa.rdulinux.com
   vars:
     dns_server: 192.168.2.2
     nfs_server: repo.rdulinux.com
@@ -22,8 +22,8 @@ defaults:
     api_endpoint: ""   # name of the cluster's API load balancer once it is HA (api.qa.rdulinux.com); empty = the first controller's floating IP
 
 nodes:
-  c1: { role: controller, flavor: m1.small }
-  w1: { role: worker, flavor: m1.small }
-  w2: { role: worker, flavor: m1.small }
-  #w3: { role: worker, flavor: m1.small }
+  c1-qa: { role: controller, flavor: m1.small }
+  w1-qa: { role: worker, flavor: m1.small }
+  w2-qa: { role: worker, flavor: m1.small }
+  w3-qa: { role: worker, flavor: m1.small }
   # learn (spare test VM) was removed 2026-10-20 to free capacity.

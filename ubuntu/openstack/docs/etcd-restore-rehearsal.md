@@ -1,12 +1,12 @@
 # etcd restore rehearsal (do this on QA, never first on prod)
 
 A backup is only proven once it has been restored. This rehearses the full path on the QA
-single-node control plane (`c1.qa.rdulinux.com`) using a marker object, so no real data is at risk.
+single-node control plane (`c1-qa.rdulinux.com`) using a marker object, so no real data is at risk.
 QA controllers built from the current cloud-init already run the `etcd-snapshot.timer`.
 
 ## 1. Create a marker and take a snapshot
 ```bash
-# on c1.qa.rdulinux.com
+# on c1-qa.rdulinux.com
 kubectl create configmap restore-marker --from-literal=when=before-snapshot
 sudo systemctl start etcd-snapshot.service
 SNAP=$(ls -1t /var/backups/etcd/etcd-*.db | head -1); echo $SNAP
@@ -59,7 +59,7 @@ Snapshots contain the cluster's Secrets in plain form: keep them root-only (`060
 Expect to lose changes made after the last snapshot (timer: every 6 hours).
 
 ## Rehearsal log
-- **2026-10-19, QA (`c1.qa.rdulinux.com`, etcd 3.5.15, Kubernetes 1.30.14): passed.**
+- **2026-10-19, QA (`c1-qa.rdulinux.com`, etcd 3.5.15, Kubernetes 1.30.14): passed.**
   Snapshot 4.6 MB (revision 14918, 1,498 keys), also copied to `/nfsshare/etcd-backups/qa/`.
   The marker ConfigMap deleted after the snapshot came back after the restore; all 4 nodes `Ready`,
   no failing pods, etcd healthy, ingress still answering. API server back about 25 s after etcd was restarted.

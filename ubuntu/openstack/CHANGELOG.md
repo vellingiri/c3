@@ -8,6 +8,12 @@ Update this file in the same commit as any change, and list anything done **by h
 
 
 
+## 2026-11-18: QA renamed to the prod/cka scheme and rebuilt
+
+- `environments/qa`: VMs are now `c1-qa`, `w1-qa`, `w2-qa`, `w3-qa` (`<role><n>-<env>`), fqdn `c1-qa.rdulinux.com` etc. in the main zone (was `c1`..`w3`, `c1.qa.rdulinux.com`). env tag stays `qa`, so `scripts/env-vms.py qa` is unchanged.
+- QA was destroyed and rebuilt (a rename in place would keep the old hostnames baked into cloud-init). **Breaking:** all QA IPs changed (c1-qa 10.0.1.101 / 192.168.2.107, w1-qa .207 / .56, w2-qa .222 / .118, w3-qa .51 / .120); the cluster has a new CA, so `~/.kube/qa` was replaced (context `qa`). State backup before: `/root/qa-rebuild-backup` on c3.
+- `w3-qa` is now in nodes.yaml (it was running but commented out).
+
 ## 2026-11-15: memory squeeze: database pair to 2 GB, QA `c1` to 4 GB
 
 - QA `w2` failed with `NoValidHost`: Nova's memory limit (about 95,650 MB) was 94,208 MB used. See "Capacity update" in `docs/ARCHITECTURE.md`.

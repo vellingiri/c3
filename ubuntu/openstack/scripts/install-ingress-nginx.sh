@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Install ingress-nginx on a cluster as a NodePort (default 30080, the port the load balancer used to route to).
-#   scripts/install-ingress-nginx.sh <controller-host> [nodeport]    e.g. c1.qa.rdulinux.com
+#   scripts/install-ingress-nginx.sh <controller-host> [nodeport]    e.g. c1-qa.rdulinux.com
 # Safe to re-run. Do not use on a cluster where another service already owns the NodePort.
 set -euo pipefail
-HOST=${1:?controller host, e.g. c1.qa.rdulinux.com}
+HOST=${1:?controller host, e.g. c1-qa.rdulinux.com}
 PORT=${2:-30080}
 VER=controller-v1.11.2
 SSH_USER=${SSH_USER:-root}

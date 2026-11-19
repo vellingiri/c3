@@ -70,36 +70,36 @@ If it lists individual prod IPs instead of `10.0.1.0/24`, add the QA IPs before 
 1. **Free NodePort 30080 on QA.** The QA ingress-nginx owns it and has no apps, so remove it
    for now (re-install later if wanted):
    ```bash
-   # on c1.qa.rdulinux.com
+   # on c1-qa.rdulinux.com
    kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.2/deploy/static/provider/baremetal/deploy.yaml
    ```
 2. **Install Argo CD with the same version** on QA:
    ```bash
-   # on c1.qa.rdulinux.com
+   # on c1-qa.rdulinux.com
    kubectl create ns argocd
    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.1/manifests/install.yaml
    ```
 3. **Copy Argo config and repo credential** (on c1-prod.rdulinux.com):
    ```bash
-   k8s-copy.sh c1.qa.rdulinux.com -n argocd configmap argocd-cm argocd-cmd-params-cm argocd-rbac-cm
-   k8s-copy.sh c1.qa.rdulinux.com -n argocd secret -l argocd.argoproj.io/secret-type=repository
-   ssh root@c1.qa.rdulinux.com kubectl -n argocd rollout restart deploy/argocd-server
+   k8s-copy.sh c1-qa.rdulinux.com -n argocd configmap argocd-cm argocd-cmd-params-cm argocd-rbac-cm
+   k8s-copy.sh c1-qa.rdulinux.com -n argocd secret -l argocd.argoproj.io/secret-type=repository
+   ssh root@c1-qa.rdulinux.com kubectl -n argocd rollout restart deploy/argocd-server
    ```
 4. **Finance namespace, secrets, storage** (on c1-prod.rdulinux.com):
    ```bash
-   ssh root@c1.qa.rdulinux.com kubectl create ns finance
-   k8s-copy.sh c1.qa.rdulinux.com -n finance secret app-secret db-secret ghcr-secret
-   k8s-copy.sh c1.qa.rdulinux.com pv finance-backups finance-logs finance-uploads
-   k8s-copy.sh c1.qa.rdulinux.com -n finance pvc backups-pvc logs-pvc uploads-pvc
-   k8s-copy.sh c1.qa.rdulinux.com -n finance configmap nginx-config    # skip if Phase 0 shows it is in git
+   ssh root@c1-qa.rdulinux.com kubectl create ns finance
+   k8s-copy.sh c1-qa.rdulinux.com -n finance secret app-secret db-secret ghcr-secret
+   k8s-copy.sh c1-qa.rdulinux.com pv finance-backups finance-logs finance-uploads
+   k8s-copy.sh c1-qa.rdulinux.com -n finance pvc backups-pvc logs-pvc uploads-pvc
+   k8s-copy.sh c1-qa.rdulinux.com -n finance configmap nginx-config    # skip if Phase 0 shows it is in git
    ```
 5. **Create the Application** and let it sync (on c1-prod.rdulinux.com):
    ```bash
-   k8s-copy.sh c1.qa.rdulinux.com -n argocd application finance-qa
+   k8s-copy.sh c1-qa.rdulinux.com -n argocd application finance-qa
    ```
 6. **Suspend the CronJobs on QA straight away** (prod keeps running them):
    ```bash
-   # on c1.qa.rdulinux.com
+   # on c1-qa.rdulinux.com
    kubectl -n finance patch cronjob db-backup-hourly db-backup-daily -p '{"spec":{"suspend":true}}'
    ```
    (If the Application has `selfHeal`, Argo may revert this; then pause its auto-sync instead.)
@@ -122,7 +122,7 @@ Then:
 ```bash
 # prod: stop backups.   QA: start them.
 ssh root@c1-prod.rdulinux.com kubectl -n finance patch cronjob db-backup-hourly db-backup-daily -p '{"spec":{"suspend":true}}'
-ssh root@c1.qa.rdulinux.com   kubectl -n finance patch cronjob db-backup-hourly db-backup-daily -p '{"spec":{"suspend":false}}'
+ssh root@c1-qa.rdulinux.com   kubectl -n finance patch cronjob db-backup-hourly db-backup-daily -p '{"spec":{"suspend":false}}'
 ```
 Argo UI during the rebuild (optional): on QA patch `argocd-server` to nodePort 30443 and point
 `backend argocd_nodes` at the QA IPs the same way.
@@ -148,7 +148,7 @@ The new nodes boot with their plain hostnames (`c1`, `w1`...); the controller ru
 
 ## Phase 4 - move back
 Repeat Phase 1 steps 2-5 **from QA to prod** (reverse the direction; `k8s-copy.sh` works from
-`c1.qa.rdulinux.com` to `c1-prod.rdulinux.com`), with these differences:
+`c1-qa.rdulinux.com` to `c1-prod.rdulinux.com`), with these differences:
 - no need to delete anything; prod has no ingress-nginx,
 - install the prod Argo with NodePort 30443 for `argo.rdulinux.com` (patch `argocd-server`).
 
