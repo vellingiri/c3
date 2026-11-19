@@ -11,7 +11,7 @@ while [ $# -gt 0 ]; do case "$1" in --list) LIST=$2; shift ;; --with-cka) CKA=1 
 # shellcheck disable=SC1091
 source /root/.bashrc >/dev/null 2>&1 || true
 OS() { openstack "$@" </dev/null 2>/dev/null; }   # </dev/null: when the script is piped through ssh, openstack must not read the script from stdin (made the start script die silently on 2026-10-22)
-rank() { case "$1" in dbw*) echo 1 ;; db[0-9]*) echo 2 ;; c[0-9]*) echo 3 ;; ci*|runner*) echo 5 ;; *) echo 4 ;; esac; }   # amphorae and workers = 4
+rank() { case "$1" in dbw*) echo 1 ;; db[0-9]*) echo 2 ;; c[0-9]*|controller*) echo 3 ;; ci*|runner*|rancher*) echo 5 ;; *) echo 4 ;; esac; }   # amphorae and workers = 4
 
 if [ -s "$LIST" ]; then awk '{print $2}' "$LIST" > /tmp/vm-ids.$$
 else OS server list --all-projects --status SHUTOFF -f value -c ID | cat > /tmp/vm-ids.$$; echo "(no $LIST: using every SHUTOFF VM)"; fi

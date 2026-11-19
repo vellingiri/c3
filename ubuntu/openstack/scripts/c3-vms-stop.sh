@@ -13,7 +13,7 @@ for a in "$@"; do case "$a" in --yes) YES=1 ;; --dry-run) DRY=1 ;; *) echo "usag
 source /root/.bashrc >/dev/null 2>&1 || true
 OS() { openstack "$@" </dev/null 2>/dev/null; }   # </dev/null: when the script is piped through ssh, openstack must not read the script from stdin (made the start script die silently on 2026-10-22)
 # stop rank: smaller = earlier
-rank() { case "$1" in ci*|runner*) echo 1 ;; w[0-9]*) echo 2 ;; amphora-*) echo 3 ;; c[0-9]*) echo 4 ;; db[0-9]*) echo 5 ;; dbw*) echo 6 ;; *) echo 3 ;; esac; }
+rank() { case "$1" in ci*|runner*|rancher*) echo 1 ;; w[0-9]*|worker*) echo 2 ;; amphora-*) echo 3 ;; c[0-9]*|controller*) echo 4 ;; db[0-9]*) echo 5 ;; dbw*) echo 6 ;; *) echo 3 ;; esac; }
 
 OS server list --all-projects --status ACTIVE -f value -c ID -c Name | while read -r id name; do echo "$(rank "$name") $id $name"; done | sort -n > "$LIST.new"
 [ -s "$LIST.new" ] || { echo "no ACTIVE VMs"; rm -f "$LIST.new"; exit 0; }

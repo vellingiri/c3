@@ -31,54 +31,17 @@ moved {
 
 
 moved {
-  from = module.node["c1"]
-  to   = module.node["c1-prod"]
-}
-
-moved {
-  from = module.node["c2"]
-  to   = module.node["c2-prod"]
-}
-
-moved {
-  from = module.node["c3"]
-  to   = module.node["c3-prod"]
-}
-
-moved {
-  from = module.node["w1"]
-  to   = module.node["w1-prod"]
-}
-
-moved {
-  from = module.node["w2"]
-  to   = module.node["w2-prod"]
-}
-
-moved {
-  from = module.node["w3"]
-  to   = module.node["w3-prod"]
-}
-
-moved {
-  from = module.node["db1"]
-  to   = module.node["db1-prod"]
-}
-
-moved {
-  from = module.node["db2"]
-  to   = module.node["db2-prod"]
-}
-
-moved {
-  from = module.node["dbw1"]
-  to   = module.node["dbw1-prod"]
-}
-
-moved {
   from = module.node["runner"]
   to   = module.node["ci1-prod"]
 }
 
 # Names of the non-Kubernetes VMs (same day): db1-prod, db2-prod, dbw1-prod (their etcd/Patroni member names stay db1, db2, dbw1: `member:` in nodes.yaml)
 # and ci1-prod, the GitHub Actions runner (role `runner`, formerly `runner`).
+
+# 2026-11-19: the Rancher management VM drops the -prod suffix (prod keeps plain role names for its shared services); renamed in place.
+moved {
+  from = module.node["rancher-prod"]
+  to   = module.node["rancher"]
+}
+
+# 2026-11-19: db1, db2 and dbw1 lose the -prod suffix (plain names for prod); their old moved blocks were removed so the keys can be reused; the VMs are replaced one by one (db-ha-patroni.md).

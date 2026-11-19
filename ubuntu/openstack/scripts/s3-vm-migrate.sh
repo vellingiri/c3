@@ -10,8 +10,8 @@
 set -euo pipefail
 OLD="${OLD_S3:-backup}"                       # ssh name of the old host
 OLD_URL="${OLD_URL:-http://192.168.2.4:9000}"
-VM="${S3_VM:-root@s3-prod.rdulinux.com}"
-VM_URL="${VM_URL:-http://s3-prod.rdulinux.com:9000}"
+VM="${S3_VM:-root@s3.rdulinux.com}"
+VM_URL="${VM_URL:-http://s3.rdulinux.com:9000}"
 SSHV=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
 vm() { "${SSHV[@]}" "$VM" "$@"; }
 old() { ssh -o BatchMode=yes "$OLD" "$@"; }

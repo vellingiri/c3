@@ -19,7 +19,7 @@ CONFIG=${DB_MONITOR_CONFIG:-/etc/default/db-monitor}
 : "${REMIND_SECONDS:=21600}"
 : "${WITNESS:=dbw1=10.0.1.120}"   # name=ip of each etcd witness VM (space separated)
 : "${PATRONI_PORT:=8008}"
-: "${S3_HEALTH_URL:=http://s3-prod.rdulinux.com:9000/health}"
+: "${S3_HEALTH_URL:=http://s3.rdulinux.com:9000/health}"
 : "${STATE_FILE:=/var/lib/db-monitor/state}"
 : "${NTFY_URL:=}"
 export PGUSER PGPASSWORD PGCONNECT_TIMEOUT=5

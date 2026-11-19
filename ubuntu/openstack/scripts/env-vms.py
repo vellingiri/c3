@@ -52,8 +52,8 @@ FRONT_DOOR = {"prod": "http://finance.rdulinux.com/health"}
 # Roles that are never stopped or started by this script, even though they carry env=<env>. The S3 server (s3-prod) is the Terraform state store: while it
 # is off, no `terraform plan` or `apply` in any stack can read or write its state, and the tfstate backups have nothing to copy.
 NEVER_STOP_ROLES = {"objstore"}
-RANK = {"runner": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
-RANK_NAME = {1: "runner", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
+RANK = {"mgmt": 1, "runner": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
+RANK_NAME = {1: "runner / management (rancher-prod)", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
 # The Octavia load balancers that belong to each environment (their amphorae are the VMs `--lbs` stops and starts). Override: ENV_LBS="prod=finance-lb,argo-lb,prod-api;cka=cka-api"
 ENV_LBS = {"prod": ["finance-lb", "argo-lb", "prod-api"], "cka": ["cka-api"]}
 if os.environ.get("ENV_LBS"):
@@ -160,13 +160,13 @@ def lb_summary(env):
 
 
 def guess_rank(name):
-    if re.match(r"^(ci|runner)", name):
+    if re.match(r"^(ci|runner|rancher)", name):
         return 1
     if re.match(r"^dbw", name):
         return 5
     if re.match(r"^db", name):
         return 4
-    if re.match(r"^c\d", name):
+    if re.match(r"^(c\d|controller)", name):
         return 3
     return 2
 

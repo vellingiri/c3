@@ -10,7 +10,7 @@ APPLY = len(sys.argv) > 2 and sys.argv[2] == "apply"
 assert PREFIX.endswith("/") and not PREFIX.startswith("openstack"), PREFIX
 env = subprocess.check_output(["docker","inspect","rustfs","--format","{{range .Config.Env}}{{println .}}{{end}}"], text=True)
 AK = re.search(r"^RUSTFS_ACCESS_KEY=(.*)$", env, re.M).group(1); SK = re.search(r"^RUSTFS_SECRET_KEY=(.*)$", env, re.M).group(1)
-BASE = "http://s3-prod.rdulinux.com:9000/terraform-state"
+BASE = "http://s3.rdulinux.com:9000/terraform-state"
 def s3(method, path, out=None):
     cmd = ["curl","-fsS","--aws-sigv4","aws:amz:us-east-1:s3","--user",f"{AK}:{SK}","-X",method,BASE+path]
     if out: cmd += ["-o", out]

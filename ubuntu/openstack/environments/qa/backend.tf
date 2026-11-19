@@ -7,7 +7,7 @@ terraform {
     use_lockfile = true
 
     endpoints = {
-      s3 = "http://s3-prod.rdulinux.com:9000"
+      s3 = "http://s3.rdulinux.com:9000"
     }
 
     skip_credentials_validation = true

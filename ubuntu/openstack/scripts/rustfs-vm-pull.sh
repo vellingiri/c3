@@ -7,7 +7,7 @@
 # beyond KEEP are pruned. This is the second layer under the API-level state snapshots (s3-tfstate-backup.sh): it restores the WHOLE store,
 # versions included. Restore: scripts/s3-vm-restore.sh, docs/s3-state-store.md.
 set -euo pipefail
-SRC="${RUSTFS_VM:-s3-prod.rdulinux.com}"
+SRC="${RUSTFS_VM:-s3.rdulinux.com}"
 DEST=/backup/rustfs-vm
 KEEP=200
 KEY=/root/.ssh/s3vm-backup

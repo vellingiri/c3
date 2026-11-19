@@ -347,7 +347,7 @@ tf_stage() {   # tf_stage NAME DIR
   stage "$name" "terraform in $dir (dry run = plan without a lock, nothing is written)"
   [ -d "$d" ] || { skip "no $d (--tf-repo)"; return; }
   command -v terraform >/dev/null 2>&1 || { skip "terraform is not installed"; return; }
-  grep -Eq '^[^#]*[[:space:]]s3-prod\.rdulinux\.com' /etc/hosts 2>/dev/null && warn "/etc/hosts overrides s3-prod.rdulinux.com: Terraform here uses a TEMPORARY state store (scripts/s3-temp-store.sh status)"
+  grep -Eq '^[^#]*[[:space:]]s3-prod\.rdulinux\.com' /etc/hosts 2>/dev/null && warn "/etc/hosts overrides s3.rdulinux.com: Terraform here uses a TEMPORARY state store (scripts/s3-temp-store.sh status)"
   is_git "$TF_REPO" || info "no git metadata in $TF_REPO: newest file in $dir is from $(ls -t "$d"/*.tf "$d"/nodes.yaml 2>/dev/null | head -1 | xargs -r stat -c %y | cut -c1-10); a plan from an old copy can show changes that are not real (run Terraform from the Mac, or sync the repo first)"
   if [ "$dir" = environments/prod ] && [ ! -e "$d/secrets.auto.tfvars" ]; then
     skip "$dir needs $d/secrets.auto.tfvars (git-ignored; scripts/db-ha-secrets.sh makes it from the live Patroni config): not planning (terraform would ask for the database password)"; return; fi
@@ -415,8 +415,8 @@ stage_backup_host() {
   if ! rssh root@192.168.2.4 true 2>/dev/null; then warn "cannot ssh to root@192.168.2.4 (backup)"; return; fi
   ok "ssh to backup works"
   # RustFS (the Terraform state store) runs on the s3-prod VM since 2026-11-15; this host keeps the backups and the timers (docs/s3-state-store.md)
-  rssh root@s3-prod.rdulinux.com 'docker ps --format "{{.Names}} {{.Status}}" | grep -q "^rustfs "' && ok "RustFS container is running on s3-prod" || drift "RustFS container is not running on s3-prod (scripts/s3-vm-restore.sh)"
-  [ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://s3-prod.rdulinux.com:9000/health)" = 200 ] && ok "RustFS health 200" || drift "RustFS health is not 200"
+  rssh root@s3.rdulinux.com 'docker ps --format "{{.Names}} {{.Status}}" | grep -q "^rustfs "' && ok "RustFS container is running on s3-prod" || drift "RustFS container is not running on s3-prod (scripts/s3-vm-restore.sh)"
+  [ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://s3.rdulinux.com:9000/health)" = 200 ] && ok "RustFS health 200" || drift "RustFS health is not 200"
   local t; for t in tfstate-backup.timer rustfs-vm-pull.timer openwrt-backup.timer; do
     if rssh root@192.168.2.4 "systemctl is-active $t" | grep -q '^active$'; then ok "backup timer $t is active"
     else drift "backup timer $t is not active"; act "install on backup" "$REPO/scripts/install-$(case $t in tfstate-backup.timer) echo s3-tfstate-backup;; rustfs-vm-pull.timer) echo rustfs-vm-pull;; *) echo s3-openwrt-backup;; esac).sh"; fi; done

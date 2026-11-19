@@ -10,6 +10,7 @@ locals {
     database   = ["base", "db-ha", "database"] # etcd + PostgreSQL + Patroni, joins the running pair by itself (cloud-init/files/db-ha-node.sh)
     learn      = ["base", "learn"]
     witness    = ["base", "db-ha", "witness"] # third etcd voter for the database pair
+    mgmt       = ["base"]            # management plane VM (Rancher): plain Ubuntu, K3s and Rancher are installed on top by hand/Helm
     objstore   = ["base", "objstore"]         # RustFS: the S3 server that holds every Terraform state (docs/s3-state-store.md)
   }
 

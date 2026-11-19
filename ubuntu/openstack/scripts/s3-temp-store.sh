@@ -12,14 +12,14 @@
 #                                                    the VM (scripts/s3-vm-restore.sh), and check the VM holds exactly the same states
 #   s3-temp-store.sh stop [--remove]                 stop the temporary store (--remove also sets its data aside)
 #
-# Terraform finds this store because the address in every backend and every terraform_remote_state is the NAME s3-prod.rdulinux.com: on the machine that
+# Terraform finds this store because the address in every backend and every terraform_remote_state is the NAME s3.rdulinux.com: on the machine that
 # runs Terraform, one /etc/hosts line points that name at the temporary store (this script prints it; it never edits /etc/hosts). While it is there,
 # every `terraform apply` writes the NEW state into the temporary store, which is why `handback` restores from it and not from the old snapshot.
 # Safe by construction: the snapshot under /backup/rustfs-vm is only READ (copied), never mounted; nothing is deleted.
 set -euo pipefail
 BOX="${BACKUP_BOX:-root@192.168.2.4}"
 SNAPS=/backup/rustfs-vm; CFG=/backup/rustfs-vm-config; TEMP=/opt/rustfs-temp; NAME=rustfs-temp
-IMG=rustfs/rustfs:1.0.2-pinned; IP=192.168.2.4; HOSTNAME_S3=s3-prod.rdulinux.com
+IMG=rustfs/rustfs:1.0.2-pinned; IP=192.168.2.4; HOSTNAME_S3=s3.rdulinux.com
 HERE="$(cd "$(dirname "$0")" && pwd)"
 box() { ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$BOX" "$@" </dev/null; }
 say() { printf '\n== %s\n' "$*"; }
