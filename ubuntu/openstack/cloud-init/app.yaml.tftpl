@@ -1,0 +1,123 @@
+#cloud-config
+# DR replica of the finance app (prod = rdu, ${prod_host}). Same docker compose stack, refreshed hourly by
+# finance-dr-pull.timer with a read-only key. Warm standby: nothing promotes it automatically (docs/dr-replica.md).
+# Secrets (/opt/finance/.env) and the first data load are NOT in cloud-init: they are copied from prod
+# over ssh once, after the VM is up (scripts/dr-bootstrap.sh).
+write_files:
+  - path: /usr/local/sbin/finance-dr-pull
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Pull config, images (when they changed), the database and uploads from prod. Read-only on prod:
+      # the key is limited on rdu to five fixed read commands (config, imageids, image, dump, uploads).
+      set -euo pipefail
+      exec 9>/run/finance-dr-pull.lock
+      flock -n 9 || { echo "another pull is running"; exit 0; }
+      PROD="${prod_host}"
+      W=/var/lib/finance-dr
+      S="ssh -i /root/.ssh/dr-pull -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 root@$PROD"
+      mkdir -p $W
+      cd /opt/finance
+      echo "== pull $(date -Is)"
+
+      # 1. compose file + nginx.conf (never .env: that is copied by hand and carries the DR overrides)
+      $S config | tar -x -C /opt/finance --no-same-owner
+
+      # 2. images, only when prod's image ids changed
+      new=$($S imageids | tr '\n' ' ')
+      old=$(cat $W/imageids 2>/dev/null || true)
+      if [ "$new" != "$old" ]; then
+        echo "images changed, loading"
+        $S image | docker load
+        echo "$new" > $W/imageids
+      fi
+
+      # 3. database: dump to a file first and check it reads before touching the running copy
+      $S dump > $W/dump.new
+      docker exec -i finance-db-1 pg_restore -l < $W/dump.new > /dev/null
+      docker compose up -d db
+      docker compose stop backend || true
+      docker exec finance-db-1 sh -c 'dropdb -U $POSTGRES_USER --if-exists --force $POSTGRES_DB && createdb -U $POSTGRES_USER $POSTGRES_DB'
+      docker exec -i finance-db-1 sh -c 'pg_restore -U $POSTGRES_USER -d $POSTGRES_DB --no-owner --exit-on-error' < $W/dump.new
+      mv -f $W/dump.new $W/dump.last
+
+      # 4. uploads, through a staging dir so a broken transfer never empties the live copy
+      rm -rf $W/uploads.new && mkdir -p $W/uploads.new
+      $S uploads | tar -x -p --numeric-owner -C $W/uploads.new
+      docker compose up --no-start backend >/dev/null 2>&1 || true
+      UP=/var/lib/docker/volumes/finance_uploads/_data
+      mkdir -p $UP
+      rsync -a --delete $W/uploads.new/ $UP/
+      rm -rf $W/uploads.new
+
+      docker compose up -d
+      date -Is > $W/last-sync
+      echo "== pull ok"
+  - path: /etc/systemd/system/finance-dr-pull.service
+    content: |
+      [Unit]
+      Description=Pull config, images, database and uploads from prod (read-only)
+      After=docker.service network-online.target
+      Wants=network-online.target
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/finance-dr-pull
+      TimeoutStartSec=1800
+  - path: /etc/systemd/system/finance-dr-pull.timer
+    content: |
+      [Unit]
+      Description=Hourly pull from prod
+      [Timer]
+      OnCalendar=*:17
+      Persistent=true
+      RandomizedDelaySec=120
+      [Install]
+      WantedBy=timers.target
+  - path: /usr/local/sbin/finance-dr-promote
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # FAILOVER, run by a person when prod is down. Stops the hourly pull, makes one last pull if prod still
+      # answers, switches the stack from standby settings to prod's real .env, and starts it.
+      # DNS is NOT touched: point yourassets.in / the name you serve at this VM yourself.
+      set -euo pipefail
+      systemctl disable --now finance-dr-pull.timer
+      /usr/local/sbin/finance-dr-pull || echo "prod unreachable: promoting the last good copy ($(cat /var/lib/finance-dr/last-sync))"
+      cd /opt/finance
+      cp -p /opt/finance/.env /opt/finance/.env.standby
+      install -m 0400 /opt/finance/.env.prod /opt/finance/.env
+      docker compose up -d --force-recreate
+      echo "promoted: this VM is now the live copy. Do not re-enable finance-dr-pull.timer."
+  - path: /etc/apache2/sites-available/finance-dr.conf
+    content: |
+      <VirtualHost *:80>
+          ServerName ${app_fqdn}
+          RewriteEngine On
+          RewriteRule ^ https://${app_fqdn}/ [R=301,L]
+      </VirtualHost>
+      <VirtualHost *:443>
+          ServerName ${app_fqdn}
+          SSLEngine on
+          SSLCertificateFile    /etc/ssl/finance-dr/fullchain.pem
+          SSLCertificateKeyFile /etc/ssl/finance-dr/privkey.pem
+          Header always set X-Content-Type-Options "nosniff"
+          ProxyPreserveHost On
+          # nginx in the stack answers only to the production names, so present one of them
+          RequestHeader set Host "yourassets.in"
+          RequestHeader set X-Forwarded-Proto "https"
+          ProxyPass / http://127.0.0.1:8080/
+          ProxyPassReverse / http://127.0.0.1:8080/
+      </VirtualHost>
+
+runcmd:
+  - 'for i in 1 2 3 4 5; do DEBIAN_FRONTEND=noninteractive apt-get install -y -o DPkg::Lock::Timeout=120 docker.io docker-compose-v2 apache2 rsync jq openssl && break; sleep 20; done'
+  - systemctl enable --now docker
+  - mkdir -p /opt/finance /var/lib/finance-dr /var/log/finance /etc/ssl/finance-dr
+  - 'test -f /root/.ssh/dr-pull || ssh-keygen -q -t ed25519 -N "" -C finance-dr-pull -f /root/.ssh/dr-pull'
+  - 'openssl req -x509 -nodes -newkey rsa:2048 -days 825 -subj "/CN=${app_fqdn}" -addext "subjectAltName=DNS:${app_fqdn}" -keyout /etc/ssl/finance-dr/privkey.pem -out /etc/ssl/finance-dr/fullchain.pem'
+  - chmod 600 /etc/ssl/finance-dr/privkey.pem
+  - a2enmod ssl proxy proxy_http headers rewrite
+  - a2dissite 000-default || true
+  - a2ensite finance-dr
+  - systemctl restart apache2
+  - systemctl daemon-reload
