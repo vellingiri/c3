@@ -30,11 +30,6 @@ moved {
 # Same VMs, ports and floating IPs under the new keys; only the name attributes change and the DNS records are re-created in the main zone.
 
 
-moved {
-  from = module.node["runner"]
-  to   = module.node["ci1-prod"]
-}
-
 # Names of the non-Kubernetes VMs (same day): db1-prod, db2-prod, dbw1-prod (their etcd/Patroni member names stay db1, db2, dbw1: `member:` in nodes.yaml)
 # and ci1-prod, the GitHub Actions runner (role `runner`, formerly `runner`).
 
