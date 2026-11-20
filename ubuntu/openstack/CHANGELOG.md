@@ -4,10 +4,13 @@ What changed in the lab infrastructure, newest first. One entry per day that mat
 what bites later. The matching app-side changes are in the finance repo (`docs/RELEASE_NOTES.md`, [PR 309](https://github.com/vellingiri/finance/pull/309)). Design background: `docs/`.
 Update this file in the same commit as any change, and list anything done **by hand** (not in Terraform) under "Not in Terraform".
 
-## 2026-11-20 — `finance` (DR replica) is env=prod and starts with prod
+## 2026-11-20 — `finance` (DR replica) moves into the prod stack; the dr environment is gone
 
-- `environments/dr/nodes.yaml`: `environment: dr` -> `prod`. The VM `finance` is tagged `env=prod`, `role=app` (still its own stack/state `environments/dr`). **The Nova metadata changes in place only after a `terraform apply` of environments/dr** (not applied in this change).
-- `scripts/env-vms.py`: `prod start --all` starts `finance` in the last tier (after the databases). A plain `prod stop` leaves it running (`SPARE_ON_PLAIN_STOP_ROLES = {"app"}`); stop it by name (`prod stop finance`). Docs: `docs/env-vms-maintenance.md`.
+- `environments/dr` is **deleted**; the VM `finance` (role `app`) is a node of `environments/prod/nodes.yaml` and carries `env=prod`. Same VM, port and floating IP: they are **imported** into the prod state by the `import` blocks in `environments/prod/moved.tf` (nothing is recreated).
+- **Not applied yet.** Order: (1) `terraform apply` in environments/prod (adds the six objects to the prod state, sets env/tags to prod; the plan also powers `finance` on); (2) then, from a checkout of the commit before this change, `terraform state rm 'module.node["finance"]'` in environments/dr so the old state (key `openstack/dr/nodes/terraform.tfstate`) stops owning them. Never `destroy` the old stack. Until the apply, Nova still says `env=dr`, so `prod start` does not list `finance`.
+- `scripts/env-vms.py`: `prod start --all` starts `finance` in the last tier (after the databases). A plain `prod stop` leaves it running (`SPARE_ON_PLAIN_STOP_ROLES = {"app"}`); stop it by name (`prod stop finance`). Docs: `docs/env-vms-maintenance.md`, `docs/dr-replica.md`.
+
+**Not in Terraform:** nothing new; the state hand-over in step (2) is a manual state edit.
 
 ## 2026-11-20 — DR VM renamed `dr` -> `finance`
 

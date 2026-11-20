@@ -8,7 +8,7 @@ Warm standby of production (rdu, 13.140.58.46: docker compose in /opt/finance). 
 | Data | `finance-dr-pull.timer`, hourly at :17. Pulls config, images (when changed), pg_dump and uploads from rdu over ssh. Last good sync: `/var/lib/finance-dr/last-sync` |
 | Prod side | one key line in rdu's `/root/.ssh/authorized_keys`: `restrict`, `from=<this site's public IP>`, forced command with five read verbs (config, imageids, image, dump, uploads). Backup: `authorized_keys.bak-pre-dr*` |
 | Standby `.env` | prod's values except EMAIL_ENABLED=false, ALERT_WEBHOOK/ALERT_EMAIL empty, COOKIE_SECURE=0, APP_BASE_URL = http://finance.rdulinux.com, CORS_ORIGINS = http://finance.rdulinux.com|
-| Rebuild | terraform apply in environments/dr (c3 tree), then `dr-bootstrap.sh <dr-ip>` |
+| Rebuild | terraform apply in environments/prod (c3 tree; node `finance` in nodes.yaml), then `dr-bootstrap.sh <dr-ip>` |
 
 ## Failover (a person runs it; nothing promotes automatically)
 1. `ssh root@finance.rdulinux.com finance-dr-promote` stops the timer, makes a last pull if rdu answers (otherwise uses the last good copy), restores `.env.prod` and recreates the stack.

@@ -45,6 +45,10 @@ nodes:
   # runner has default + k8s SGs, which equal the defaults, so no override needed.
   runner: { role: runner, flavor: m1.medium-20g, domain: rdulinux.com }   # the GitHub Actions runner `finance-runner` (labels qa, finance) and the DB replication monitor; recreated 2026-11-19 with its plain name
 
+  # finance: the DR replica of the finance app (docs/dr-replica.md), moved here from the former environments/dr stack on 2026-11-20 (the dr environment no longer
+  # exists). Same VM, port and floating IP (imported, see moved.tf). Default SG only; started with prod by scripts/env-vms.py (role app, last tier).
+  finance: { role: app, flavor: m1.small-20g, domain: rdulinux.com, security_group_ids: ["f00e0d86-c4f7-492d-893d-dab70cf732be"], vars: { prod_host: 13.140.58.46, app_fqdn: finance.rdulinux.com } }   # prod_host = rdu, the source the VM pulls from
+
   # Kubernetes cluster. VM names are controller1..3 and worker1..3 (no environment suffix in prod); the environment is a tag/metadata.
   controller1: { role: controller_join, flavor: k8s.controller }
   # control-plane nodes 2 and 3 (2026-10-20): join through api.prod.rdulinux.com by themselves and are added to the load balancer prod-api by the reconciler on c3;
