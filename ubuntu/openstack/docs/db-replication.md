@@ -114,7 +114,7 @@ The goal is one writable primary. **Never leave both writable** (split brain).
    change it faster from c3: `openstack recordset set rdulinux.com. db.rdulinux.com. --record 192.168.2.135` (then make `infra.yaml` match, or the next
    apply reverts it). Servers see the change within a minute. **macOS caches the old answer for longer**: if `ssh db` still lands on the old host,
    `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder`.
-6. **Verify:** `curl http://finance.rdulinux.com/health` -> 200, log in and open a page that reads and writes, and run a backup job:
+6. **Verify:** `curl http://qa.rdulinux.com/health` -> 200, log in and open a page that reads and writes, and run a backup job:
    `k create job --from=cronjob/db-backup-daily manual-after-failover && k logs -f job/manual-after-failover` (same `k` function).
 7. **Get redundancy back** (when `db1` is repaired or replaced): rebuild it as a replica of the new primary. The roles have swapped, so
    `REBUILD=1 scripts/db-replica-setup.sh db2 db1`. Update the layout table above. To make `db1` the primary again later, do a planned switchover.

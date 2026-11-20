@@ -60,7 +60,8 @@ dns:
     backup:  { ip: 192.168.2.4, ptr: true }   # the off-host backups (NFS /backup, state and router snapshots, the s3 pull). Named `s3` 2026-10-20 to 2026-11-15, while it was the Terraform state store (MinIO, then RustFS on :9000); that store is now the s3 VM
     # db is the service name of the CURRENT primary Postgres (db1 now, db2 after a failover); change ip to fail over.
     db:      { ip: 192.168.2.124, ttl: 60 }
-    finance: { ip: 192.168.2.5, ptr: true }   # the finance app, served by finance-lb
+    finance: { ip: 192.168.2.80 }   # the DR replica (VM dr); since 2026-11-20 (was the QA app, now qa). dr.rdulinux.com is kept as an extra name (the VM record)
+    qa:      { ip: 192.168.2.5, zone: qa.rdulinux.com., name: "@", ptr: true }   # QA app served by finance-lb, apex of the qa zone
     argo:    { ip: 192.168.2.113, ptr: true }   # argo-lb, its own Octavia load balancer (finance-lb keeps 192.168.2.5)
     # API endpoints of the Kubernetes clusters: Octavia TCP load balancers <env>-api (docs/k8s-ha-control-plane.md); this name is each cluster's controlPlaneEndpoint
     api-prod: { ip: 192.168.2.61, zone: prod.rdulinux.com., name: api }

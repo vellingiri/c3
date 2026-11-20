@@ -28,7 +28,7 @@ Nodes talk over the private network; people and the load balancers use floating 
 | `c3` | 192.168.2.2 | n/a | the cloud host: OpenStack (Debian packages) and the DNS server (Designate). **Rebooting it takes everything down; the VMs restart by themselves and both front doors return about 3 minutes after `c3` is reachable (proven with two plain reboots on 2026-10-20): `c3-reboot.md`, `amphora-reboot-fix.md`** |
 | `repo` | 192.168.2.3 | n/a | NFS server: VM images, finance logs, uploads and backups (`/exports/finance-qa/...`); VMs mount a share at `/nfsshare` (join files, etcd snapshots) |
 | `backup` (named `s3` 2026-10-20 to 2026-11-15) | 192.168.2.4 | n/a | the off-host backups (NFS `/backup`, e.g. `/backup/finance-qa/pre-rebuild-20261019/`); renamed from `backup` on 2026-10-20 |
-| `finance` | 192.168.2.5 | VIP 10.0.1.89 | the finance app, served by Octavia `finance-lb` |
+| `qa` | 192.168.2.5 | VIP 10.0.1.89 | the finance app, served by Octavia `finance-lb` |
 | `argo` | 192.168.2.113 | VIP 10.0.1.56 | Argo CD, served by Octavia `argo-lb` |
 | `db1` | 192.168.2.124 | 10.0.1.191 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **primary**) (m1.small) |
 | `db2` | 192.168.2.135 | 10.0.1.69 | PostgreSQL 16 under Patroni + etcd; primary or replica (currently **replica**) (m1.small) |
@@ -48,7 +48,7 @@ Kubernetes 1.30, Calico, pod CIDR `10.244.0.0/16` in prod (cka and qa: `192.168.
 ## How a request travels
 ```
 browser / curl
-   |  http://finance.rdulinux.com  ->  192.168.2.5
+   |  http://qa.rdulinux.com  ->  192.168.2.5
    v
 Octavia finance-lb (2 amphora VMs, active/standby, VRRP)          http://argo.rdulinux.com -> 192.168.2.113 -> argo-lb (1 amphora)
    |  health check GET /health on each worker, round robin                |  health check GET /healthz

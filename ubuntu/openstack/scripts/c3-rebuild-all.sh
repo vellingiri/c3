@@ -473,7 +473,7 @@ for s in json.load(sys.stdin):
     c[(p.get('env','amphora') if isinstance(p,dict) else '?', s['Status'])]+=1
 print(dict(c))" 2>/dev/null)"
   info "load balancers: $(os loadbalancer list -f value -c name -c operating_status | tr '\n' ';')"
-  local door; for door in finance.rdulinux.com/health argo.rdulinux.com/; do
+  local door; for door in qa.rdulinux.com/health argo.rdulinux.com/; do
     [ "$(curl -s -o /dev/null -m 6 -w '%{http_code}' "http://$door")" = 200 ] && ok "front door http://$door answers 200" || warn "front door http://$door does not answer 200 (normal while prod is shut down)"; done
   local ev; ev=$(journalctl -k -b --no-pager 2>/dev/null | grep -c -E 'Oops|segfault|BUG:|Machine check')
   [ "$ev" = 0 ] && ok "no kernel oops/segfault/machine-check since boot" || warn "$ev kernel oops/segfault lines since boot (docs/c3-hardware-instability.md)"

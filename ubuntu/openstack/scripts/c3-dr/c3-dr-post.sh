@@ -101,7 +101,7 @@ check() {
   openstack loadbalancer list -c name -c vip_address -c provisioning_status -c operating_status
   openstack loadbalancer amphora list -c id -c role -c status
   openstack floating ip list -c "Floating IP Address" -c "Fixed IP Address" -c Status | head -20
-  for u in http://finance.rdulinux.com/health http://argo.rdulinux.com/; do printf '%s -> %s\n' "$u" "$(curl -s -o /dev/null -m 5 -w '%{http_code}' "$u")"; done
+  for u in http://qa.rdulinux.com/health http://argo.rdulinux.com/; do printf '%s -> %s\n' "$u" "$(curl -s -o /dev/null -m 5 -w '%{http_code}' "$u")"; done
 }
 
 case "${1:-}" in

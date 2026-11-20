@@ -1,4 +1,4 @@
-# DR replica: `dr` (http://dr.rdulinux.com)
+# DR replica: `dr` (http://finance.rdulinux.com)
 
 Warm standby of production (rdu, 13.140.58.46: docker compose in /opt/finance). One VM `dr` on c3's OpenStack
 (192.168.2.80, 2 vCPU / 4 GB / 20 GB), plain http on port 80 (Apache -> nginx 127.0.0.1:8080), no TLS.
@@ -7,7 +7,7 @@ Warm standby of production (rdu, 13.140.58.46: docker compose in /opt/finance). 
 |---|---|
 | Data | `finance-dr-pull.timer`, hourly at :17. Pulls config, images (when changed), pg_dump and uploads from rdu over ssh. Last good sync: `/var/lib/finance-dr/last-sync` |
 | Prod side | one key line in rdu's `/root/.ssh/authorized_keys`: `restrict`, `from=<this site's public IP>`, forced command with five read verbs (config, imageids, image, dump, uploads). Backup: `authorized_keys.bak-pre-dr*` |
-| Standby `.env` | prod's values except EMAIL_ENABLED=false, ALERT_WEBHOOK/ALERT_EMAIL empty, COOKIE_SECURE=0, APP_BASE_URL and CORS_ORIGINS = http://dr.rdulinux.com. Prod's untouched copy: `/opt/finance/.env.prod` |
+| Standby `.env` | prod's values except EMAIL_ENABLED=false, ALERT_WEBHOOK/ALERT_EMAIL empty, COOKIE_SECURE=0, APP_BASE_URL and CORS_ORIGINS = http://finance.rdulinux.com. Prod's untouched copy: `/opt/finance/.env.prod` |
 | Rebuild | terraform apply in environments/dr (c3 tree), then `dr-bootstrap.sh <dr-ip>` |
 
 ## Failover (a person runs it; nothing promotes automatically)
@@ -16,4 +16,4 @@ Warm standby of production (rdu, 13.140.58.46: docker compose in /opt/finance). 
 3. Do not re-enable the timer afterwards: it would overwrite the DR copy with prod's data. Reverse the direction first.
 
 ## DNS access from 192.168.0.0/24 (2026-11-19)
-c3 bind (/etc/bind/named.conf.options, edited by hand, not managed by Terraform) now lists 192.168.0.0/24 in allow-query, allow-query-cache and allow-recursion, next to 10.0.0.0/24, 192.168.1.0/24 and 192.168.2.0/24, so clients there can resolve dr.rdulinux.com. Backup of the previous file: /etc/bind/named.conf.options.bak-pre-dr-20261119. rndc has no control channel on c3 (connection refused on 127.0.0.1:953), so reload with: kill -HUP $(cat /run/named/named.pid). A rebuild of c3 must re-apply this edit. Routing from 192.168.0.0/24 and 192.168.1.0/24 to 192.168.2.0/24 is the router, not c3.
+c3 bind (/etc/bind/named.conf.options, edited by hand, not managed by Terraform) now lists 192.168.0.0/24 in allow-query, allow-query-cache and allow-recursion, next to 10.0.0.0/24, 192.168.1.0/24 and 192.168.2.0/24, so clients there can resolve finance.rdulinux.com. Backup of the previous file: /etc/bind/named.conf.options.bak-pre-dr-20261119. rndc has no control channel on c3 (connection refused on 127.0.0.1:953), so reload with: kill -HUP $(cat /run/named/named.pid). A rebuild of c3 must re-apply this edit. Routing from 192.168.0.0/24 and 192.168.1.0/24 to 192.168.2.0/24 is the router, not c3.

@@ -18,7 +18,7 @@ Pools are static lists of `private IP : NodePort` (`octavia-finance-lb.md`). "Cu
 3. Remove the prod workers from both pools (`openstack loadbalancer member delete finance-pool w2`, ...). Traffic now runs on QA. Compare public paths first, as in the 2026-10-19 log below.
 4. Rebuild prod (Phase 3). The nodes the new prod cluster gets keep their ports and private IPs, so the old pool member addresses stay valid.
 5. Move back: re-add the prod workers (`w1` to `w5`), wait `ONLINE`, remove the QA members. Cron jobs and the Argo Application move as in Phases 1 and 4.
-Other changes since the log below: the finance app is at `http://finance.rdulinux.com` (no `qa.rdulinux.com`); db access is by IP `10.0.1.191` (`db1`); the kubeconfig and the CI runner's kubeconfig must be replaced after the CA changes (`k8s-operations.md`).
+Other changes since the log below: the QA finance app is at `http://qa.rdulinux.com` (was finance.rdulinux.com until 2026-11-20); db access is by IP `10.0.1.191` (`db1`); the kubeconfig and the CI runner's kubeconfig must be replaced after the CA changes (`k8s-operations.md`).
 
 Goal: recreate `c1`, `w1..3` from the current cloud-init (proper hostnames /
 node names) with almost no downtime, by running the workloads on the QA cluster meanwhile.

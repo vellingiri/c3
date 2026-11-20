@@ -11,9 +11,9 @@ echo "command=\"case \$SSH_ORIGINAL_COMMAND in dump) docker exec finance-db-1 sh
 # 2. prod's secrets -> the VM (never echoed)
 ssh rdu 'cat /opt/finance/.env' | ssh root@$DRIP 'install -d -m 0700 /opt/finance; umask 277; cat > /opt/finance/.env.prod'
 ssh rdu 'cat /opt/finance/.backup-key' | ssh root@$DRIP 'umask 077; cat > /opt/finance/.backup-key'
-# 3. standby .env = prod values, but: no mail/alerts, plain http at dr.rdulinux.com (cookie not Secure)
+# 3. standby .env = prod values, but: no mail/alerts, plain http at finance.rdulinux.com (cookie not Secure)
 ssh root@$DRIP 'cd /opt/finance
 grep -v -E "^(EMAIL_ENABLED|ALERT_WEBHOOK|ALERT_EMAIL|COOKIE_SECURE|APP_BASE_URL|CORS_ORIGINS)=" .env.prod > .env.tmp
-printf "EMAIL_ENABLED=false\nALERT_WEBHOOK=\nALERT_EMAIL=\nCOOKIE_SECURE=0\nAPP_BASE_URL=http://dr.rdulinux.com\nCORS_ORIGINS=http://dr.rdulinux.com\n" >> .env.tmp
+printf "EMAIL_ENABLED=false\nALERT_WEBHOOK=\nALERT_EMAIL=\nCOOKIE_SECURE=0\nAPP_BASE_URL=http://finance.rdulinux.com\nCORS_ORIGINS=http://finance.rdulinux.com\n" >> .env.tmp
 install -m 0400 .env.tmp .env; rm .env.tmp
 systemctl start finance-dr-pull.service && systemctl enable --now finance-dr-pull.timer'

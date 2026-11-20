@@ -28,7 +28,7 @@ kubectl --kubeconfig ~/.kube/prod get nodes
 k get pods -o wide                                                    # 3 of each, each on a different node
 k get pdb                                                             # ALLOWED DISRUPTIONS 1 each when healthy
 kubectl --kubeconfig ~/.kube/prod -n argocd get application finance-qa   # Synced / Healthy
-curl -s -o /dev/null -w '%{http_code}\n' http://finance.rdulinux.com/health
+curl -s -o /dev/null -w '%{http_code}\n' http://qa.rdulinux.com/health
 ```
 `/health` answers 200 even if the database is down (it does not check it). To test the database path use
 `k exec deploy/backend -- sh -c 'psql "$DATABASE_URL" -qAt -c "select inet_server_addr(), pg_is_in_recovery()"'`.

@@ -4,6 +4,17 @@ What changed in the lab infrastructure, newest first. One entry per day that mat
 what bites later. The matching app-side changes are in the finance repo (`docs/RELEASE_NOTES.md`, [PR 309](https://github.com/vellingiri/finance/pull/309)). Design background: `docs/`.
 Update this file in the same commit as any change, and list anything done **by hand** (not in Terraform) under "Not in Terraform".
 
+## 2026-11-20 — QA is qa.rdulinux.com, finance.rdulinux.com is the DR replica
+
+**Breaking changes**
+- **`finance.rdulinux.com` no longer points at the QA load balancer.** It now resolves to 192.168.2.80 (the DR replica, VM `dr`). QA (`finance-lb`, 192.168.2.5) is **`qa.rdulinux.com`** (apex record of the `qa.rdulinux.com.` zone; the PTR of .5 follows it). Anything that still calls `http://finance.rdulinux.com/health` for QA now hits DR (HTTPS only, HTTP 301s). CI uses the IP and is unaffected.
+- `dr.rdulinux.com` is kept as an extra name for the DR replica until the owner agrees to remove it.
+- DR serves `https://finance.rdulinux.com`; Chrome may hold HSTS for finance.rdulinux.com from QA days: clear it at chrome://net-internals/#hsts.
+
+**Terraform:** `infra/infra.yaml` (`qa` record, `finance` ip), `modules/dns` (PTR target for an apex record, `moved` ptr[finance] -> ptr[qa]).
+
+**Not in Terraform (done by hand on dr):** new cert from the private CA (~/finance-dr-ca on the admin Mac) with SANs finance.rdulinux.com, dr.rdulinux.com, 192.168.2.80 in /etc/ssl/finance-dr/finance.{crt,key}; Apache finance-dr.conf (ServerName finance, ServerAlias dr); /opt/finance/.env APP_BASE_URL=https://finance.rdulinux.com, CORS_ORIGINS=finance and dr origins. Backups: *.bak-20261120 next to each.
+
 ## 2026-11-19 — prod rebuilt with plain names, Rancher added, state store and runner recreated
 
 **Breaking changes**
