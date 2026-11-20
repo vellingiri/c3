@@ -8,18 +8,19 @@ Update this file in the same commit as any change, and list anything done **by h
 
 **Breaking changes**
 - **`dr.rdulinux.com` is gone** (A record deleted, no alias). The DR VM is `finance` (192.168.2.80), reachable as `finance.rdulinux.com`; the PTR of .80 is `finance.rdulinux.com.`. Anything that used `ssh dr` / `dr.rdulinux.com` must use `finance.rdulinux.com` (finance repo: CI `DR_HOST` default).
+- **DR is plain http again: `http://finance.rdulinux.com`, no TLS** (owner decision: no SSL on-prem). Apache serves :80 only (no redirect, no HSTS), mod_ssl disabled, certs and keys under /etc/ssl/finance-dr removed (tarball `/root/finance-dr-tls-retired-20261120.tgz` on the VM), `.env` `APP_BASE_URL`/`CORS_ORIGINS` are http, `COOKIE_SECURE=0`. A browser that opened https://finance.rdulinux.com (or dr) while the cert was installed, 2026-11-20 morning, may hold HSTS for up to a year (Apache sent `Strict-Transport-Security: max-age=31536000` on :443): clear it at chrome://net-internals/#hsts.
 - The VM was **not** recreated: same instance id, floating IP and disk. Hostname, Apache `ServerName`, `CORS_ORIGINS` and the cloud-init hosts template now say `finance`.
 
 **Terraform:** `environments/dr/nodes.yaml` node key `dr` -> `finance` (state moved with `terraform state mv`, no destroy). The `finance` A record moved from `infra/infra.yaml` (infra stack, `state rm`) to the node module (dr stack, `import`), so the node record and the service name are the same record.
 
-**Not in Terraform (done by hand on the VM):** `hostnamectl set-hostname finance`, `/etc/hosts` and `/etc/cloud/templates/hosts.debian.tmpl`, `finance-dr.conf` (no `ServerAlias`), `/opt/finance/.env` `CORS_ORIGINS`.
+**Not in Terraform (done by hand on the VM):** TLS removed (above), `hostnamectl set-hostname finance`, `/etc/hosts` and `/etc/cloud/templates/hosts.debian.tmpl`, `finance-dr.conf` (no `ServerAlias`), `/opt/finance/.env` `CORS_ORIGINS`.
 
 ## 2026-11-20 — QA is qa.rdulinux.com, finance.rdulinux.com is the DR replica
 
 **Breaking changes**
 - **`finance.rdulinux.com` no longer points at the QA load balancer.** It now resolves to 192.168.2.80 (the DR replica, VM `dr`). QA (`finance-lb`, 192.168.2.5) is **`qa.rdulinux.com`** (apex record of the `qa.rdulinux.com.` zone; the PTR of .5 follows it). Anything that still calls `http://finance.rdulinux.com/health` for QA now hits DR (HTTPS only, HTTP 301s). CI uses the IP and is unaffected.
 - `dr.rdulinux.com` is kept as an extra name for the DR replica until the owner agrees to remove it.
-- DR serves `https://finance.rdulinux.com`; Chrome may hold HSTS for finance.rdulinux.com from QA days: clear it at chrome://net-internals/#hsts.
+- DR serves plain http://finance.rdulinux.com (no TLS, see 2026-11-20 DR rename); Chrome may hold HSTS for finance.rdulinux.com from QA days: clear it at chrome://net-internals/#hsts.
 
 **Terraform:** `infra/infra.yaml` (`qa` record, `finance` ip), `modules/dns` (PTR target for an apex record, `moved` ptr[finance] -> ptr[qa]).
 
