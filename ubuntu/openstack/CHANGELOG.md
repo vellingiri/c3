@@ -4,6 +4,16 @@ What changed in the lab infrastructure, newest first. One entry per day that mat
 what bites later. The matching app-side changes are in the finance repo (`docs/RELEASE_NOTES.md`, [PR 309](https://github.com/vellingiri/finance/pull/309)). Design background: `docs/`.
 Update this file in the same commit as any change, and list anything done **by hand** (not in Terraform) under "Not in Terraform".
 
+## 2026-11-20 — DR VM renamed `dr` -> `finance`
+
+**Breaking changes**
+- **`dr.rdulinux.com` is gone** (A record deleted, no alias). The DR VM is `finance` (192.168.2.80), reachable as `finance.rdulinux.com`; the PTR of .80 is `finance.rdulinux.com.`. Anything that used `ssh dr` / `dr.rdulinux.com` must use `finance.rdulinux.com` (finance repo: CI `DR_HOST` default).
+- The VM was **not** recreated: same instance id, floating IP and disk. Hostname, Apache `ServerName`, `CORS_ORIGINS` and the cloud-init hosts template now say `finance`.
+
+**Terraform:** `environments/dr/nodes.yaml` node key `dr` -> `finance` (state moved with `terraform state mv`, no destroy). The `finance` A record moved from `infra/infra.yaml` (infra stack, `state rm`) to the node module (dr stack, `import`), so the node record and the service name are the same record.
+
+**Not in Terraform (done by hand on the VM):** `hostnamectl set-hostname finance`, `/etc/hosts` and `/etc/cloud/templates/hosts.debian.tmpl`, `finance-dr.conf` (no `ServerAlias`), `/opt/finance/.env` `CORS_ORIGINS`.
+
 ## 2026-11-20 — QA is qa.rdulinux.com, finance.rdulinux.com is the DR replica
 
 **Breaking changes**
