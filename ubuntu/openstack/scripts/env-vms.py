@@ -12,7 +12,8 @@
 Run it from your Mac. It reaches OpenStack through `ssh c3` (the admin credentials are in /root/.bashrc there) and the cluster/database
 through your usual kubeconfig (~/.kube/<env>, context <env>) and ssh names (db1 ...). Nothing is installed anywhere.
 
-Which VMs: those whose Nova metadata says env=<env> (Terraform sets `env` and `role` on every node). The Octavia amphorae (the load balancers) carry no
+Which VMs: those whose Nova metadata says env=<env> (Terraform sets `env` and `role` on every node). The DR replica `finance` (env=prod, role=app) is
+started in the LAST tier by `start`; a plain `stop` leaves it running (stop it by name: `prod stop finance`). The Octavia amphorae (the load balancers) carry no
 env, so by default they are not touched: the load balancers stay up and only mark their members down while the VMs are off. With `--lbs` the amphorae of
 the environment's load balancers (prod: finance-lb, argo-lb, prod-api; cka: cka-api) are stopped LAST and started FIRST, and the Octavia health manager is
 stopped before the first amphora goes down (it rebuilds an amphora that is silent for 5 minutes) and started again after they are back.
@@ -52,8 +53,11 @@ FRONT_DOOR = {"prod": "http://qa.rdulinux.com/health"}
 # Roles that are never stopped or started by this script, even though they carry env=<env>. The S3 server (s3) is the Terraform state store: while it
 # is off, no `terraform plan` or `apply` in any stack can read or write its state, and the tfstate backups have nothing to copy.
 NEVER_STOP_ROLES = {"objstore"}
-RANK = {"mgmt": 1, "runner": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
-RANK_NAME = {1: "runner / management (rancher)", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
+# Roles that a plain `stop` (no server named) leaves running: the DR replica `finance` (env=prod, role=app, its own Terraform stack environments/dr) is started
+# with prod (last tier) but is not part of a prod maintenance stop. Stop it by name: `prod stop finance`.
+SPARE_ON_PLAIN_STOP_ROLES = {"app"}
+RANK = {"mgmt": 1, "runner": 1, "app": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
+RANK_NAME = {1: "runner / management (rancher) / DR replica (finance)", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
 # The Octavia load balancers that belong to each environment (their amphorae are the VMs `--lbs` stops and starts). Override: ENV_LBS="prod=finance-lb,argo-lb,prod-api;cka=cka-api"
 ENV_LBS = {"prod": ["finance-lb", "argo-lb", "prod-api"], "cka": ["cka-api"]}
 if os.environ.get("ENV_LBS"):
@@ -356,6 +360,11 @@ def cmd_stop(env, args):
     vms = pick(list_vms(env), args, env)
     if not vms:
         die("no VMs with env=%s found" % env)
+    if not args.servers:
+        spared = [v["name"] for v in vms if v["role"] in SPARE_ON_PLAIN_STOP_ROLES and v["status"] == "ACTIVE"]
+        vms = [v for v in vms if v["role"] not in SPARE_ON_PLAIN_STOP_ROLES]
+        if spared:
+            say("left running on purpose (DR replica; stop it by name): " + " ".join(spared))
     running = [v for v in vms if v["status"] == "ACTIVE"]
     other = [v for v in vms if v["status"] != "ACTIVE"]
     if other:

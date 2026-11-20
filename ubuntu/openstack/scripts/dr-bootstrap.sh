@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-time steps after `terraform apply` of environments/dr (run from a machine that can ssh to both
+# One-time steps after `terraform apply` of environments/prod (node finance) (run from a machine that can ssh to both
 # `rdu` (prod) and the DR VM `finance`). Nothing secret is printed. Done once on 2026-11-19; kept so a rebuilt VM can be redone.
 set -euo pipefail
 DRIP=${1:?DR VM address (finance.rdulinux.com)}
