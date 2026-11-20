@@ -59,7 +59,7 @@ resource "openstack_dns_recordset_v2" "ptr" {
   name    = "${split(".", each.value.ip)[3]}.${var.reverse_zone_name}"
   type    = "PTR"
   ttl     = 3000
-  records = ["${each.value.name}.${each.value.zone}"]
+  records = [each.value.name == "@" ? each.value.zone : "${each.value.name}.${each.value.zone}"]
 }
 
 # ---- re-keying of the old hand-written records (no recreation) ----
@@ -117,4 +117,10 @@ moved {
 moved {
   from = openstack_dns_recordset_v2.ptr["lb"]
   to   = openstack_dns_recordset_v2.ptr["finance"]
+}
+
+# 2026-11-20: 192.168.2.5 (finance-lb) is named qa.rdulinux.com; finance.rdulinux.com is now the DR replica (192.168.2.80). The PTR of .5 follows the QA name.
+moved {
+  from = openstack_dns_recordset_v2.ptr["finance"]
+  to   = openstack_dns_recordset_v2.ptr["qa"]
 }

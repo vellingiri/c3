@@ -46,7 +46,7 @@ C3 = os.environ.get("C3_HOST", "c3")
 STATE_DIR = os.environ.get("ENV_VMS_STATE", os.path.expanduser("~/.cache/c3-env-vms"))
 STOP_TIER_TIMEOUT = 360     # seconds to wait for one tier to reach SHUTOFF (Nova forces the power-off itself after its own timeout)
 START_TIER_TIMEOUT = 300
-FRONT_DOOR = {"prod": "http://finance.rdulinux.com/health"}
+FRONT_DOOR = {"prod": "http://qa.rdulinux.com/health"}
 
 # stop order: smaller first. Start is the reverse.
 # Roles that are never stopped or started by this script, even though they carry env=<env>. The S3 server (s3) is the Terraform state store: while it

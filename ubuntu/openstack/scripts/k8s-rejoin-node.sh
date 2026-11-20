@@ -22,7 +22,7 @@ host_of() { case "$1" in *-$ENV_NAME) echo "$1"; return;; esac; if [ -n "$(dig +
 say() { printf '\n== %s\n' "$*"; }
 die() { echo "STOP: $*" >&2; exit 1; }
 ready_count() { K get nodes --no-headers | grep -c " Ready" || true; }
-door() { curl -s -o /dev/null -m 5 -w '%{http_code}' http://finance.rdulinux.com/health 2>/dev/null; }
+door() { curl -s -o /dev/null -m 5 -w '%{http_code}' http://qa.rdulinux.com/health 2>/dev/null; }
 
 say "checks"
 K get node "$OLD" >/dev/null || die "no node $OLD in $ENV_NAME"

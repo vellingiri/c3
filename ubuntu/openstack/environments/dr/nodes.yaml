@@ -1,8 +1,8 @@
 # Disaster-recovery replica of PRODUCTION (rdu, 13.140.58.46: docker compose stack in /opt/finance).
 # One VM on c3 that runs the same stack, refreshed hourly from rdu (finance-dr-pull.timer). It is a warm
 # standby: nothing promotes it automatically. Failover steps: docs/dr-replica.md.
-# Name: the VM is simply "dr" (DNS dr.rdulinux.com).
-# service name dr.rdulinux.com is an extra A record in main.tf.
+# Name: the VM is simply "dr" (DNS finance.rdulinux.com).
+# service name finance.rdulinux.com is an extra A record in main.tf.
 
 environment: dr
 
@@ -15,7 +15,7 @@ defaults:
   vars:
     dns_server: 192.168.2.2
     prod_host: 13.140.58.46      # rdu, the source the VM pulls from
-    app_fqdn: dr.rdulinux.com
+    app_fqdn: finance.rdulinux.com
 
 nodes:
   dr: { role: app, flavor: m1.small-20g }   # 2 vCPU, 4 GB, 20 GB
