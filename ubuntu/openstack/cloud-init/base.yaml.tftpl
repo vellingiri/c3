@@ -22,3 +22,8 @@ runcmd:
   - unlink /etc/resolv.conf || true
   - cp /etc/resolv.conf.static /etc/resolv.conf
   - apt-get update
+  # c3:/share (NFS) on every VM; automounted on first access, never blocks boot (nofail)
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y nfs-common
+  - mkdir -p /share
+  - grep -q "^192.168.2.2:/share " /etc/fstab || echo "192.168.2.2:/share /share nfs4 rw,vers=4.2,hard,_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600 0 0" >> /etc/fstab
+  - systemctl daemon-reload && systemctl restart share.automount
