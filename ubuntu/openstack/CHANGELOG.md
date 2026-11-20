@@ -4,6 +4,11 @@ What changed in the lab infrastructure, newest first. One entry per day that mat
 what bites later. The matching app-side changes are in the finance repo (`docs/RELEASE_NOTES.md`, [PR 309](https://github.com/vellingiri/finance/pull/309)). Design background: `docs/`.
 Update this file in the same commit as any change, and list anything done **by hand** (not in Terraform) under "Not in Terraform".
 
+## 2026-11-20 — `env-vms.py prod start` also starts the DR replica `finance`
+
+- `scripts/env-vms.py` now treats `finance` (env=`dr`, role=`app`) as part of prod for **start and status**: `prod start --all` brings it back in the last tier, after the databases. A plain `prod stop` leaves it running; stop it by name (`prod stop finance`). Mapping: `ENV_EXTRA` (default `prod=dr`; `ENV_EXTRA=` turns it off). Docs: `docs/env-vms-maintenance.md`.
+- Tested with `prod start --all --lbs --dry-run`, `prod status`, `prod stop --dry-run` and `ENV_EXTRA= ... start --all --dry-run` only; no VM was started or stopped.
+
 ## 2026-11-20 — DR VM renamed `dr` -> `finance`
 
 **Breaking changes**

@@ -12,7 +12,8 @@
 Run it from your Mac. It reaches OpenStack through `ssh c3` (the admin credentials are in /root/.bashrc there) and the cluster/database
 through your usual kubeconfig (~/.kube/<env>, context <env>) and ssh names (db1 ...). Nothing is installed anywhere.
 
-Which VMs: those whose Nova metadata says env=<env> (Terraform sets `env` and `role` on every node). The Octavia amphorae (the load balancers) carry no
+Which VMs: those whose Nova metadata says env=<env> (Terraform sets `env` and `role` on every node). `start` and `status` of prod also include the DR
+replica `finance` (env=dr, role=app), started in the LAST tier; a plain `stop` leaves it running (stop it by name: `prod stop finance`). The Octavia amphorae (the load balancers) carry no
 env, so by default they are not touched: the load balancers stay up and only mark their members down while the VMs are off. With `--lbs` the amphorae of
 the environment's load balancers (prod: finance-lb, argo-lb, prod-api; cka: cka-api) are stopped LAST and started FIRST, and the Octavia health manager is
 stopped before the first amphora goes down (it rebuilds an amphora that is silent for 5 minutes) and started again after they are back.
@@ -52,14 +53,21 @@ FRONT_DOOR = {"prod": "http://qa.rdulinux.com/health"}
 # Roles that are never stopped or started by this script, even though they carry env=<env>. The S3 server (s3) is the Terraform state store: while it
 # is off, no `terraform plan` or `apply` in any stack can read or write its state, and the tfstate backups have nothing to copy.
 NEVER_STOP_ROLES = {"objstore"}
-RANK = {"mgmt": 1, "runner": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
-RANK_NAME = {1: "runner / management (rancher)", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
+RANK = {"mgmt": 1, "runner": 1, "app": 1, "worker": 2, "controller": 3, "controller_join": 3, "database": 4, "witness": 5, "amphora": 6}
+RANK_NAME = {1: "runner / management (rancher) / DR replica (finance)", 2: "workers", 3: "control planes", 4: "databases", 5: "witness", 6: "load balancers (amphorae)"}
 # The Octavia load balancers that belong to each environment (their amphorae are the VMs `--lbs` stops and starts). Override: ENV_LBS="prod=finance-lb,argo-lb,prod-api;cka=cka-api"
 ENV_LBS = {"prod": ["finance-lb", "argo-lb", "prod-api"], "cka": ["cka-api"]}
 if os.environ.get("ENV_LBS"):
     ENV_LBS = {k: v.split(",") for k, v in (x.split("=", 1) for x in os.environ["ENV_LBS"].split(";") if "=" in x)}
+# VMs of ANOTHER environment that belong to the start/status of this one: the DR replica (`finance`, env=dr, role=app) is brought back with prod, in the
+# last tier (it replicates from prod, so prod's databases must be up first). `stop` leaves it running unless it is named (`prod stop finance`).
+# Override: ENV_EXTRA="prod=dr;cka=" (env names whose VMs are included; empty = none).
+ENV_EXTRA = {"prod": ["dr"]}
+if os.environ.get("ENV_EXTRA") is not None:
+    ENV_EXTRA = {k: [x for x in v.split(",") if x] for k, v in (x.split("=", 1) for x in os.environ["ENV_EXTRA"].split(";") if "=" in x)}
 LB_SETTLE = int(os.environ.get("LB_SETTLE", "90"))   # seconds the amphorae get to boot and send heartbeats before the health manager is started again
 INCLUDE_LBS_FLAG = False
+INCLUDE_EXTRA = False                                # set in main(): the ENV_EXTRA environments' VMs are listed too (start, status, or when servers are named)
 INCLUDE_LBS = False                                  # set in main(): the amphorae are listed with the VMs of the environment when this is on
 
 
@@ -104,7 +112,7 @@ def list_vms(env):
     vms = []
     for v in data:
         props = parse_props(v.get("Properties"))
-        if props.get("env") != env:
+        if props.get("env") != env and not (INCLUDE_EXTRA and props.get("env") in ENV_EXTRA.get(env, [])):
             continue
         role = props.get("role", "")
         if role in NEVER_STOP_ROLES:
@@ -522,9 +530,10 @@ def main():
     if len(argv) >= 2 and argv[0] in ("stop", "start", "status"):   # the old order (command first) still works
         argv[0], argv[1] = argv[1], argv[0]
     args = ap.parse_args(argv)
-    global INCLUDE_LBS, INCLUDE_LBS_FLAG
+    global INCLUDE_LBS, INCLUDE_LBS_FLAG, INCLUDE_EXTRA
     INCLUDE_LBS_FLAG = args.lbs
     INCLUDE_LBS = args.lbs or args.command in ("start", "status") or bool(args.servers)   # start finds amphorae that `stop --lbs` marked; status shows them; a named amphora must be findable
+    INCLUDE_EXTRA = args.command in ("start", "status") or bool(args.servers)   # a plain `stop` leaves the DR replica running; naming it works for every command
     {"stop": cmd_stop, "start": cmd_start, "status": cmd_status}[args.command](args.env, args)
 
 
