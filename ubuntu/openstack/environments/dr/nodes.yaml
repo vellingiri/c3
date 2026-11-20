@@ -3,7 +3,8 @@
 # standby: nothing promotes it automatically. Failover steps: docs/dr-replica.md.
 # Name: the VM is `finance` (finance.rdulinux.com; A record and PTR come from the node module). It was called `dr` until 2026-11-20.
 
-environment: dr
+# Still its own stack and state (environments/dr), but tagged env=prod so that scripts/env-vms.py starts it with prod.
+environment: prod
 
 defaults:
   image: ubuntu2404
