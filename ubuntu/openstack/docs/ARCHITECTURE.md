@@ -71,7 +71,7 @@ nginx pods (3, one per node)  ->  /api -> backend (3)   /docs -> docs (3)   / ->
 | Network, security group, keypair, images, DNS zones and records | `infra/infra.yaml` | `terraform apply` in `infra/` (run first) |
 | VMs, their ports, floating IPs and per-VM DNS | `environments/<env>/nodes.yaml` | `terraform apply` in `environments/<env>/` |
 | Finance app manifests (replicas, probes, PDBs, NetworkPolicies, CronJobs, PVs) | finance repo `k8s/` on `develop` | **Argo CD** (auto-sync + selfHeal + prune) |
-| App images | finance repo CI builds `ghcr.io/vellingiri/finance/{backend,frontend,docs}:sha-<commit>` | CI pins the Argo application to the commit's images |
+| App images | finance repo CI builds `ghcr.io/yourassets/finance/{backend,frontend,docs}:sha-<commit>` | CI pins the Argo application to the commit's images |
 | Terraform state | S3 (MinIO) bucket `terraform-state`: `openstack/infra/...`, `openstack/<env>/nodes/...` | needs `OS_*` and the MinIO keys in your shell |
 
 ### What Terraform does **not** manage (change these by hand, and note it in `CHANGELOG.md`)
