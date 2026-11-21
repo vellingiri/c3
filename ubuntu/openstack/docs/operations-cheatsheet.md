@@ -64,7 +64,7 @@ kubectl --kubeconfig ~/.kube/cka get nodes                            # cka: c1 
 | Terraform state backups | `ssh backup 'ls -l /backup/terraform-state/last-ok'` | less than an hour old (`s3-state-store.md`) |
 | Kubernetes API behind the VIP | `ssh c3 'openstack loadbalancer member list prod-api-pool -c name -c operating_status'` | 3 members `ONLINE` once c2 and c3 exist (`k8s-ha-control-plane.md`) |
 | etcd snapshots | `ssh controller1 'ls -lh /var/backups/etcd \| tail -3'` | a recent file |
-| CI | `gh run list --repo vellingiri/finance --limit 3` | `completed/success` |
+| CI | `gh run list --repo yourassets/finance --limit 3` | `completed/success` |
 
 ## Host virtualization check on `c3`: `virt-host-validate`
 Run **`virt-host-validate qemu`** (the only driver used here). A plain `virt-host-validate` also runs the LXC checks and ends with a red line that is not a problem (checked 2026-10-20):

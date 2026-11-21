@@ -77,7 +77,7 @@ Worked example (2026-10-20, `w1` retired): pools edited, drain with 81 probe che
   # ... fix ...
   kubectl --kubeconfig ~/.kube/prod -n argocd patch application finance-qa --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
   ```
-  The application tracks `https://github.com/vellingiri/finance.git`, path `k8s`, branch `develop`. A saved copy of the original is in `~/finance-argo-application.prod.json` on your Mac.
+  The application tracks `https://github.com/yourassets/finance.git`, path `k8s`, branch `develop`. A saved copy of the original is in `~/finance-argo-application.prod.json` on your Mac.
 
 ## Kubeconfigs
 `~/.kube/prod` and `~/.kube/cka` (practice cluster) are separate files (`~/.kube/qa` is stale: the `qa` cluster was destroyed 2026-10-22), all listed in `KUBECONFIG` in `~/.bash_profile` (backups from before the rebuild: `prod.bak-old-cluster`, `qa.bak-old-c2`). Always pass `--kubeconfig` (or `--context`):

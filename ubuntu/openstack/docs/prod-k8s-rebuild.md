@@ -32,7 +32,7 @@ node names) with almost no downtime, by running the workloads on the QA cluster 
 | finance storage | 3 NFS PVs on `repo.rdulinux.com:/exports/finance-qa/{backups/finance,logs,uploads}` (data stays on NFS) |
 | database | the shared `db` VM, outside the cluster |
 | Exposure | `finance/nginx` NodePort 30080, `argocd-server` NodePort 30443, haproxy routes to both |
-| Git | `https://github.com/vellingiri/finance.git`, path `k8s`, branch `develop` |
+| Git | `https://github.com/yourassets/finance.git`, path `k8s`, branch `develop` |
 
 ## Key facts that make this safe
 - A replaced VM keeps its port and floating IP (separate Terraform resources), so private and

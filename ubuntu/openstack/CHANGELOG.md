@@ -1,7 +1,7 @@
 # Changelog (infrastructure release notes)
 
 What changed in the lab infrastructure, newest first. One entry per day that mattered, with **breaking changes** called out because they are
-what bites later. The matching app-side changes are in the finance repo (`docs/RELEASE_NOTES.md`, [PR 309](https://github.com/vellingiri/finance/pull/309)). Design background: `docs/`.
+what bites later. The matching app-side changes are in the finance repo (`docs/RELEASE_NOTES.md`, [PR 309](https://github.com/yourassets/finance/pull/309)). Design background: `docs/`.
 Update this file in the same commit as any change, and list anything done **by hand** (not in Terraform) under "Not in Terraform".
 
 ## 2026-11-20 — `finance` (DR replica) moves into the prod stack; the dr environment is gone

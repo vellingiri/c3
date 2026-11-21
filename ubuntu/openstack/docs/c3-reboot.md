@@ -72,7 +72,7 @@ The databases, both clusters, Argo, the runner and the monitor came back by them
 With automatic start configured (above) the manual shutdown and start steps can be skipped, but not the checks before and after. Allow about an hour including checks (the test took longer, because of the Octavia repairs below). The finance app is down from the first shutdown until the pods and a load balancer are back, and Argo CD may be down longer (see "What went wrong").
 
 ### Before
-1. **No CI running:** `gh run list --repo vellingiri/finance --limit 3` (wait until `completed`; the deploy step runs on the runner).
+1. **No CI running:** `gh run list --repo yourassets/finance --limit 3` (wait until `completed`; the deploy step runs on the runner).
 2. **Free memory.** You need roughly 4 GB of allocatable memory free for Octavia to rebuild amphorae (see below): `ssh c3 'openstack hypervisor stats show -c memory_mb_used'` against about 88156 allocatable.
 3. **Fresh backups:** a DB dump (`k create job --from=cronjob/db-backup-daily pre-reboot-<hhmm>`, where `k` is the function in `operations-cheatsheet.md`, then delete the job), an etcd snapshot
    (`ssh controller1 'sudo systemctl start etcd-snapshot.service'`), and `scripts/db-replication-status.sh db1 db2` showing `streaming, behind: 0 bytes`.
