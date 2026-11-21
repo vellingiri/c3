@@ -62,6 +62,12 @@ Update this file in the same commit as any change, and list anything done **by h
 - QA was destroyed and rebuilt (a rename in place would keep the old hostnames baked into cloud-init). **Breaking:** all QA IPs changed (c1-qa 10.0.1.101 / 192.168.2.107, w1-qa .207 / .56, w2-qa .222 / .118, w3-qa .51 / .120); the cluster has a new CA, so `~/.kube/qa` was replaced (context `qa`). State backup before: `/root/qa-rebuild-backup` on c3.
 - `w3-qa` is now in nodes.yaml (it was running but commented out).
 
+## 2026-11-21: first scoped `--apply` test of `c3-rebuild-all.sh`, on a blank Debian 13 VM
+
+- **By hand on c3 (not in Terraform):** Glance image `debian13-cloud` (the official `debian-13-genericcloud-amd64.qcow2`, 329 MB, from cdimage.debian.org, SHA512 checked); test VM `scripttest` (flavor `m1.medium-20g`, floating IP 192.168.2.134, `purpose=c3-rebuild-script-test`); downloaded file in `/root/dl-debian13` on c3. The VM and its floating IP are deleted when the test is over.
+- **Finding:** the lab's existing Glance image `debian13` does not boot on Nova (a hand-made 2 GB image with one MBR partition; it stops in GRUB). No VM uses it. Use `debian13-cloud` for Debian 13 VMs.
+- **Script fixes:** a job that never ran is reported as "never run", not "last ran 29921204 min ago"; `--apply` installs missing jq, rsync and git (`apt-get update` first). Results in `docs/c3-rebuild-all.md` "Test status".
+
 ## 2026-11-21: `c3-rebuild-all.sh` follows the current lab
 
 - Flavors `k8s.controller` and `m1.small-2g-20g` added to the expected list; new stage `dr-replica` (the `finance` VM on the Patroni database); `verify` checks every VM named in `environments/{prod,cka}/nodes.yaml` instead of counting; a Terraform folder initialised for the old state-store address is DRIFT with `init -reconfigure`, not FAIL. Dry run on the live c3: ok=128, no FAIL. `docs/c3-rebuild-all.md` ("Brought up to date").

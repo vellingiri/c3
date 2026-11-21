@@ -210,7 +210,10 @@ stage_preflight() {
   local h n; for h in "repo 192.168.2.3" "backup 192.168.2.4" "router 192.168.2.1"; do set -- $h
     if ping -c1 -W2 "$2" >/dev/null 2>&1; then ok "$1 ($2) answers"; else warn "$1 ($2) does not answer ping"; fi; done
   if getent hosts github.com >/dev/null 2>&1; then ok "DNS works (github.com resolves)"; else warn "cannot resolve github.com"; fi
-  for n in python3 jq rsync curl ssh git; do command -v $n >/dev/null 2>&1 && ok "tool $n" || warn "tool $n is missing"; done
+  local missing=""
+  for n in python3 jq rsync curl ssh git; do if command -v $n >/dev/null 2>&1; then ok "tool $n"; else warn "tool $n is missing"; missing="$missing $n"; fi; done
+  # a blank Debian has none of jq / rsync / git: --apply installs them (python3, curl and ssh come with the base system)
+  if [ -n "$missing" ]; then act "install the missing tools:$missing" env DEBIAN_FRONTEND=noninteractive bash -c 'apt-get update -qq && apt-get install -y -qq "$@"' _ $(printf '%s\n' $missing | sed 's/^ssh$/openssh-client/' | tr '\n' ' '); fi
   command -v crudini >/dev/null 2>&1 && ok "tool crudini" || info "crudini is missing (the platform stage installs it; --apply installs it before editing config files)"
   command -v terraform >/dev/null 2>&1 && ok "terraform $(terraform version 2>/dev/null | head -1)" || warn "terraform is not installed (the tf-* stages need it)"
   [ -r /etc/keystonerc ] && ok "/etc/keystonerc present (admin credentials)" || info "/etc/keystonerc not there yet (comes with the bundle, platform stage)"
@@ -477,8 +480,10 @@ stage_router() {
 
 stage_backups() {
   stage backups "what keeps the lab recoverable"
-  local age; age=$(( ( $(date +%s) - $(stat -c %Y /root/backups/terraform-state/last-ok 2>/dev/null || echo 0) ) / 60 ))
-  [ "$age" -lt 150 ] && ok "state snapshots pulled to c3 $age min ago (/root/backups/terraform-state)" || drift "the pull of the state snapshots to c3 last ran $age min ago"
+  local age
+  if [ ! -e /root/backups/terraform-state/last-ok ]; then drift "the pull of the state snapshots to c3 has never run here (no /root/backups/terraform-state/last-ok; tfstate-pull.timer)"
+  else age=$(( ( $(date +%s) - $(stat -c %Y /root/backups/terraform-state/last-ok) ) / 60 ))
+    [ "$age" -lt 150 ] && ok "state snapshots pulled to c3 $age min ago (/root/backups/terraform-state)" || drift "the pull of the state snapshots to c3 last ran $age min ago"; fi
   if [ -e /root/dr-staging ] || rssh root@192.168.2.4 'ls -d /backup/c3-dr/bundles/c3-dr-2* >/dev/null 2>&1'; then ok "a c3 capture bundle exists"; else warn "there is NO c3 capture bundle anywhere (/root/dr-staging, backup:/backup/c3-dr): without one the platform cannot be rebuilt. Install the nightly capture: --install-capture"; fi
   if systemctl list-timers --no-pager 2>/dev/null | grep -q c3-dr-capture; then ok "the nightly capture timer is installed"; else
     drift "the nightly capture timer is not installed"; [ "$INSTALL_CAPTURE" = 1 ] && act "install the capture timer" "$REPO/scripts/install-c3-dr-capture.sh"; fi
