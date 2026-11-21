@@ -25,10 +25,11 @@ It validates the command line first and refuses, with exit code 2 and a one-line
 | `tf-infra`, `tf-prod`, `tf-cka` | `terraform plan -lock=false` (nothing written, no lock); only resource lines kept in the log | `terraform apply` (twice if the first stops on an address conflict) |
 | `octavia`, `api-lbs`, `app-lbs` | amp security group and network ids in `octavia.conf`, the four load balancers and their floating IPs | `c3-dr-post.sh octavia / api-lbs / app-lbs` |
 | `apps` | `k8s/bootstrap.sh --check` (needs `--finance-repo` and `~/.kube/prod`) | `k8s/bootstrap.sh` |
+| `dr-replica` | the `finance` VM (DR replica, finance.rdulinux.com) is ACTIVE and uses the Patroni database: compose override and `DR_DATABASE_URL` present, no local Postgres container, `finance-dr-pull.timer` active, sync age (`finance-dr-check`), the `finance_dr` rule in both nodes' `/etc/patroni/config.yml`, database `financedb_prod` and role `finance_dr` on the leader | nothing: built by hand with the finance repo's `infra/openstack-dr/dr-bootstrap.sh` then `dr-db-create.sh` |
 | `backup-host` | the backup timers, age of the last runs, free space (the stage was `backup` until 2026-11-15; `--only backup` still works) | installs the timers if missing |
 | `router` | DHCP pool, timezone, rebind domain (needs a key for `root@192.168.2.1`) | restore from backup only with `--restore-router` (reboots the router) |
 | `backups` | state pull to c3, a capture bundle exists, the capture timer | the capture timer with `--install-capture` |
-| `verify` | services, Nova, VMs per environment, load balancers, front doors, kernel oops since boot | nothing |
+| `verify` | services, Nova, every VM named in `environments/prod/nodes.yaml` and `environments/cka/nodes.yaml` exists and is ACTIVE (read from the files, so a renamed or added VM is picked up; `qa` is on demand and not required), VMs per environment, load balancers, front doors, kernel oops since boot | nothing |
 
 Not automated, on purpose: partitioning, BIOS settings (Intel default settings, Wi-Fi off, no XMP, VT-x/VT-d), the GitHub runner token, the finance database restore (`docs/finance-db-restore.md`), the kubeconfigs on your Mac.
 
@@ -44,7 +45,7 @@ Evidence: `docs/logs/c3-rebuild-all-dry-run-2026-11-15.log` (100 checks OK, 4 DR
 | Storage | NVMe 931 GB: `/` 139.7 GB, `/boot/efi`, `/share` 25 GB, **`/var/lib/nova` 550 GB on its own partition (UUID in fstab)**, `/nfsshare` from the repo host |
 | Platform | 35 services active; keystone masked (served by Apache), placement served by Apache; databases `designate glance keystone neutron_ml2 nova nova_api nova_cell0 octavia placement` (plus the old `cinder`); 7 endpoints (no Cinder); 5 images with one `Amphora`; 3 Nova services up |
 | Settings changed since the install | all present and equal to the target (nova ratios 1.2 / 2.5, resize on the same host, resume guests, Octavia heartbeat 300, libvirt-guests, both drop-ins, OVN encap/mappings, exports, Samba) |
-| OpenStack objects | 8 flavors (4 `m1.*`, private `m1.octavia`, `k8s.worker`, `m1.small-20g`, `m1.medium-20g`); Octavia profile `active-standby` / flavor `ha`; 4 load balancers (floating IPs .5 .113 .61 .75 attached); 18 floating IPs; 5 DNS zones, 25 records; 14 VMs (10 prod, 4 cka), **all SHUTOFF** at the time (a maintenance stop) |
+| OpenStack objects | 10 flavors (4 `m1.*`, private `m1.octavia`, `k8s.worker`, `k8s.controller`, `m1.small-20g`, `m1.small-2g-20g`, `m1.medium-20g`); Octavia profile `active-standby` / flavor `ha`; 4 load balancers (floating IPs .5 .113 .61 .75 attached); 18 floating IPs; 5 DNS zones, 25 records; 14 VMs (10 prod, 4 cka), **all SHUTOFF** at the time (a maintenance stop) |
 | Local software | timers `ovn-vip-binding`, `k8s-api-lb`, `tfstate-pull` enabled and running; reconcilers in `/usr/local/sbin`; root crontab with the four website-data pulls |
 | Backups | state snapshots on backup (job ran 33 min before) and pulled to c3; router backup 9 h before; free space on backup 747 GB |
 
@@ -66,3 +67,11 @@ Evidence: `docs/logs/c3-rebuild-all-dry-run-2026-11-15.log` (100 checks OK, 4 DR
 
 ## State store lost too
 The `backup-host` stage also checks the **recovery kit** for a lost state store (fresh snapshot with `terraform-state`, RustFS image tarball with a matching checksum, `rustfs.env`, docker on the backup host, port 192.168.2.4:9000 free), and the terraform stages warn when `/etc/hosts` overrides `s3.rdulinux.com` (a temporary store is in use). Procedure: `docs/c3-rebuild.md`, "When the state store is gone too"; tool: `scripts/s3-temp-store.sh`.
+
+## Brought up to date on 2026-11-21 (what had changed since the audit)
+- **Flavors:** `k8s.controller` (2 vCPU, 4 GB, 20 GB) and `m1.small-2g-20g` (2 vCPU, 2 GB, 20 GB, the database pair) are now checked and, with `--apply`, created; Terraform cannot build the nodes without them.
+- **Names:** the VMs are `controller1-3`, `worker1-3`, `db1`, `db2`, `dbw1`, `runner`, `rancher`, `finance`, `s3` (state store, `s3.rdulinux.com`, was `s3-prod`). The `verify` stage reads the names from `nodes.yaml`, so it follows the repo and not a list in the script.
+- **New stage `dr-replica`:** see the table. First dry run on the live c3 found a stray Postgres container on `finance`, which was removed.
+- **Terraform stages:** a folder initialised for the old state-store address (`s3-prod`) now reports DRIFT with `terraform init -reconfigure` as the fix, instead of a FAIL.
+- **Still by hand, not in Terraform or the script:** the `finance_dr` role, `financedb_prod` and one `pg_hba` rule per Patroni node (finance repo `dr-db-create.sh`; the DB nodes' `db-ha-node.sh` does not have the rule yet).
+- **Dry run on the live c3 (2026-11-21):** ok=128, drift=4, warn=2, no FAIL; the DRIFT lines left are c3's Terraform folders not being initialised for the new address (Terraform normally runs from the Mac) and the missing capture bundle and timer.

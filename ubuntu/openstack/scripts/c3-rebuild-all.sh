@@ -17,12 +17,12 @@
 #   --install-capture install the nightly c3 capture timer (not installed today)        --restore-router  restore the router config from the backup host (reboots the router)
 #   --log-dir DIR     logs (default /var/log/c3-rebuild)
 #
-# Stages, in order:  preflight  layout  platform  tuning  tf-infra  octavia  api-lbs  tf-prod  tf-cka  app-lbs  apps  backup-host  router  backups  verify
+# Stages, in order:  preflight  layout  platform  tuning  tf-infra  octavia  api-lbs  tf-prod  tf-cka  app-lbs  apps  dr-replica  backup-host  router  backups  verify
 #   preflight  the machine and what the run needs (hardware, network, tools, bundle)     layout   disks and mounts (/var/lib/nova, /share, /nfsshare), kernels, time
 #   platform   OpenStack itself: services, databases, endpoints, images (c3-dr-install.sh on a blank host)    tuning   every setting we changed since the install
 #   tf-*       terraform in infra/, environments/prod, environments/cka (dry run = `plan -lock=false`)       octavia / api-lbs / app-lbs   c3-dr-post.sh
 #   apps       the finance app layer in Kubernetes (k8s/bootstrap.sh)      backup-host   the backup host (state, router and DR backups; formerly `s3`)     router   the OpenWrt router
-#   backups    what keeps the lab recoverable (state pull, DR capture)      verify   a last look at everything
+#   dr-replica the finance VM on the Patroni database (financedb_prod)      backups    what keeps the lab recoverable (state pull, DR capture)      verify   a last look at everything
 # Logging: every line goes to the screen AND to LOG_DIR/c3-rebuild-<mode>-<time>.log, with the time; LOG_DIR/....summary.tsv has one line per check;
 # terraform plan output is kept (without values) next to it. Exit code: 0 = no failed step, 1 = at least one FAIL.
 # NOT tested on a blank machine (nothing here has been run with --apply); the dry run is the tested part. Design and the audit: docs/c3-rebuild-all.md.
@@ -32,7 +32,7 @@ set -uo pipefail
 SELF=$(readlink -f "${BASH_SOURCE[0]:-$0}" 2>/dev/null || echo "$0")
 MODE=""; BUNDLE=""; ONLY=""; FROM=""; SKIP=""; YES=0; KEEP_GOING=0; REPO=""; TF_REPO=""; FINANCE_REPO=""; NOVA_DEV=""
 REINSTALL=0; OFFLINE_CPUS=0; INSTALL_CAPTURE=0; RESTORE_ROUTER=0; LOG_DIR=/var/log/c3-rebuild
-STAGES="preflight layout platform tuning tf-infra octavia api-lbs tf-prod tf-cka app-lbs apps backup-host router backups verify"
+STAGES="preflight layout platform tuning tf-infra octavia api-lbs tf-prod tf-cka app-lbs apps dr-replica backup-host router backups verify"
 usage_short() {
   cat >&2 <<USAGE
 usage: $(basename "$0") --dry-run | --apply  [options]
@@ -327,7 +327,7 @@ stage_tuning() {
   # OpenStack objects: flavors (the m1.octavia flavor, id 100, is private: it is only in `flavor list --all`)
   if os_has flavor list; then
     local f spec have id
-    for f in "m1.tiny 1 2048 10" "m1.small 2 4096 10" "m1.medium 4 8192 10" "m1.large 8 16384 10" "m1.octavia 1 2048 10" "k8s.worker 2 4096 20" "m1.small-20g 2 4096 20" "m1.medium-20g 4 8192 20"; do
+    for f in "m1.tiny 1 2048 10" "m1.small 2 4096 10" "m1.medium 4 8192 10" "m1.large 8 16384 10" "m1.octavia 1 2048 10" "k8s.worker 2 4096 20" "k8s.controller 2 4096 20" "m1.small-20g 2 4096 20" "m1.small-2g-20g 2 2048 20" "m1.medium-20g 4 8192 20"; do
       set -- $f; have=$(flavor_spec "$1")
       if [ -z "$have" ]; then drift "flavor $1 does not exist"; act "create flavor $1" osx flavor create --vcpus "$2" --ram "$3" --disk "$4" $([ "$1" = m1.octavia ] && echo "--id 100 --private" || echo --public) "$1"
       elif [ "$have" = "$2 $3 $4" ]; then ok "flavor $1 ($2 vCPU, $3 MB, $4 GB)"; else drift "flavor $1 is '$have', expected '$2 $3 $4'"; fi
@@ -363,7 +363,10 @@ tf_stage() {   # tf_stage NAME DIR
       2) drift "$dir: the plan shows changes: $(grep -m1 '^Plan:' "$planlog") (resource lines in $planlog)"
          grep -E '^\s*# .*(will be|must be)' "$planlog" | head -12 | sed 's/^/          /'
          if grep -q 'power_state' "$planlog"; then info "$dir: the changes include power_state: VMs that are SHUTOFF (a maintenance stop); an apply would start them"; fi ;;
-      *) fail "$dir: terraform plan failed: $(grep -m2 -E 'Error' "$planlog" | tr '\n' ' ' | cut -c1-200)" ;;
+      *) if printf '%s' "$out" | grep -q 'initialization required\|Backend configuration changed'; then
+           drift "$dir: this copy was initialised for another backend address (the state store moved to s3.rdulinux.com); terraform init -reconfigure fixes it"
+           act "terraform init -reconfigure" terraform -chdir="$d" init -reconfigure -input=false
+         else fail "$dir: terraform plan failed: $(grep -m2 -E 'Error' "$planlog" | tr '\n' ' ' | cut -c1-200)"; fi ;;
     esac
   else
     act "terraform apply in $dir" terraform -chdir="$d" apply -input=false -auto-approve || act "terraform apply again (a first apply of a VM can stop on 'IP already allocated', docs/c3-rebuild.md)" terraform -chdir="$d" apply -input=false -auto-approve
@@ -407,7 +410,7 @@ stage_apps() {
     if [ "$MODE" = dry ]; then act "bootstrap --check (read-only)" env KUBECONFIG="$HOME/.kube/prod" KCTX=prod "$FINANCE_REPO/k8s/bootstrap.sh" --check
     else act "k8s/bootstrap.sh (needs DB_PASSWORD, GHCR_TOKEN, GH_TOKEN in the environment)" env KUBECONFIG="$HOME/.kube/prod" KCTX=prod "$FINANCE_REPO/k8s/bootstrap.sh"; fi
   else skip "no finance repo / ~/.kube/prod here (--finance-repo DIR); run k8s/bootstrap.sh from the machine that has them"; fi
-  info "by hand, after a REBUILD: restore the finance database from the NFS dump (docs/finance-db-restore.md), register the GitHub runner (new token), copy the new kubeconfigs to your Mac"
+  info "by hand, after a REBUILD: restore the finance database from the NFS dump (docs/finance-db-restore.md), register the GitHub runner (new token), copy the new kubeconfigs to your Mac; the DR replica (dr-replica stage) is built by hand: finance repo infra/openstack-dr/dr-bootstrap.sh then dr-db-create.sh"
 }
 
 stage_backup_host() {
@@ -436,6 +439,29 @@ stage_backup_host() {
   case "$kit" in *oldtemp*) warn "/opt/rustfs-temp/data exists on the backup host: an earlier temporary store (look at it before the next start)" ;; esac
   [ -x "$REPO/scripts/s3-temp-store.sh" ] && ok "scripts/s3-temp-store.sh is present" || drift "scripts/s3-temp-store.sh is missing or not executable"
   info "free space on backup: $(rssh root@192.168.2.4 'df -h /backup | tail -1 | awk "{print \$4\" free of \"\$2}"')"
+}
+
+# The DR replica: the finance VM (finance.rdulinux.com) runs the finance app against the Patroni database (financedb_prod), synced from prod every 15 minutes.
+# Read-only checks; building it is by hand after the prod apply: finance repo infra/openstack-dr/dr-bootstrap.sh, then dr-db-create.sh (docs/c3-rebuild.md).
+stage_dr_replica() {
+  stage dr-replica "the DR replica: finance VM on the Patroni database (financedb_prod)"
+  local vm; vm=$(os server show finance -f value -c status 2>/dev/null)
+  if [ "$vm" != ACTIVE ]; then warn "VM finance is '${vm:-missing}' (terraform apply in environments/prod makes it; then dr-bootstrap.sh and dr-db-create.sh from the finance repo, infra/openstack-dr/)"; return; fi
+  ok "VM finance is ACTIVE"
+  if ! rssh root@finance true 2>/dev/null; then warn "cannot ssh to root@finance"; return; fi
+  rssh root@finance 'test -f /opt/finance/docker-compose.override.yml' && ok "finance: docker-compose.override.yml is there (the backend uses the Patroni database)" || drift "finance: docker-compose.override.yml is missing (finance repo: infra/openstack-dr/dr-db-create.sh)"
+  rssh root@finance 'grep -q "^DR_DATABASE_URL=" /opt/finance/.env' && ok "finance: DR_DATABASE_URL is set in .env" || drift "finance: DR_DATABASE_URL is not set in /opt/finance/.env (dr-db-create.sh)"
+  if rssh root@finance 'docker ps -a --format "{{.Names}}" | grep -q "^finance-db"'; then drift "finance: a local Postgres container (finance-db-*) exists; the database is meant to be the Patroni one"; else ok "finance: no local Postgres container"; fi
+  rssh root@finance 'systemctl is-active finance-dr-pull.timer' | grep -q '^active$' && ok "finance: finance-dr-pull.timer is active (every 15 minutes)" || drift "finance: finance-dr-pull.timer is not active"
+  local r; r=$(rssh root@finance /usr/local/sbin/finance-dr-check 2>&1 | tail -1)
+  case "$r" in ok:*|promoted:*) ok "finance: $r" ;; *) drift "finance: DR sync: ${r:-finance-dr-check gave no answer}" ;; esac
+  local m; for m in db1 db2; do
+    rssh root@$m 'grep -q finance_dr /etc/patroni/config.yml' && ok "$m: Patroni pg_hba has the finance_dr rule" || drift "$m: no finance_dr rule in /etc/patroni/config.yml (by hand, added by dr-db-create.sh; it is not in db-ha-node.sh yet, so a rebuilt DB node lacks it)"; done
+  local leader; leader=$(rssh root@db1 'patronictl list -f json' 2>/dev/null | python3 -c 'import sys,json; print([m["Member"] for m in json.load(sys.stdin) if m["Role"]=="Leader"][0])' 2>/dev/null)
+  if [ -n "$leader" ]; then
+    r=$(rssh root@"$leader" "sudo -u postgres psql -Atc \"select (select count(*) from pg_database where datname='financedb_prod'), (select count(*) from pg_roles where rolname='finance_dr')\"" 2>/dev/null)
+    [ "$r" = "1|1" ] && ok "Patroni leader $leader has database financedb_prod and role finance_dr" || drift "Patroni leader $leader: financedb_prod / finance_dr not both there (answer '${r:-none}'; dr-db-create.sh makes them)"
+  else warn "cannot find the Patroni leader (patronictl on db1)"; fi
 }
 
 stage_router() {
@@ -472,6 +498,13 @@ for s in json.load(sys.stdin):
     p=s.get('Properties') or {}
     c[(p.get('env','amphora') if isinstance(p,dict) else '?', s['Status'])]+=1
 print(dict(c))" 2>/dev/null)"
+  local e f nm have miss up; have=$(os server list -f value -c Name -c Status)
+  for e in prod cka; do f="$TF_REPO/environments/$e/nodes.yaml"; [ -r "$f" ] || continue; miss=""; up=0
+    for nm in $(grep -E '^  [A-Za-z0-9_-]+: *\{' "$f" | sed -E 's/^  ([A-Za-z0-9_-]+):.*/\1/'); do
+      case "$(printf '%s\n' "$have" | awk -v n="$nm" '$1==n{print $2}')" in ACTIVE) up=$((up+1)) ;; SHUTOFF) miss="$miss $nm(SHUTOFF)" ;; "") miss="$miss $nm(missing)" ;; *) miss="$miss $nm" ;; esac; done
+    [ -z "$miss" ] && ok "every VM in environments/$e/nodes.yaml exists and is ACTIVE ($up)" || { [ "$up" -gt 0 ] && info "environments/$e: $up VM(s) ACTIVE, not up:$miss" || info "environments/$e: not up:$miss"; case "$miss" in *missing*) drift "environments/$e: VM(s) in nodes.yaml missing from OpenStack:$miss" ;; esac; }
+  done
+  info "environments/qa is on demand (terraform apply there; scripts/env-vms.py qa start)"
   info "load balancers: $(os loadbalancer list -f value -c name -c operating_status | tr '\n' ';')"
   local door; for door in qa.rdulinux.com/health argo.rdulinux.com/; do
     [ "$(curl -s -o /dev/null -m 6 -w '%{http_code}' "http://$door")" = 200 ] && ok "front door http://$door answers 200" || warn "front door http://$door does not answer 200 (normal while prod is shut down)"; done
@@ -490,7 +523,7 @@ for s in $STAGES; do
   case "$s" in
     preflight) stage_preflight ;; layout) stage_layout ;; platform) stage_platform ;; tuning) stage_tuning ;;
     tf-infra) stage_tf_infra ;; octavia) stage_octavia ;; api-lbs) stage_api_lbs ;; tf-prod) stage_tf_prod ;; tf-cka) stage_tf_cka ;;
-    app-lbs) stage_app_lbs ;; apps) stage_apps ;; backup-host) stage_backup_host ;; router) stage_router ;; backups) stage_backups ;; verify) stage_verify ;;
+    app-lbs) stage_app_lbs ;; apps) stage_apps ;; dr-replica) stage_dr_replica ;; backup-host) stage_backup_host ;; router) stage_router ;; backups) stage_backups ;; verify) stage_verify ;;
   esac
 done
 finish 0
